@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 3 — Caching & CDN | Engineering Refresh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #f0f2f5;
+    --surface:  #ffffff;
+    --surface2: #f5f7fa;
+    --border:   #dde1ea;
+    --border2:  #c4cad8;
+    --text:     #1a1f2e;
+    --muted:    #5a6478;
+    --faint:    #9aa3b5;
+    --blue:     #1a7fe8;
+    --blue-bg:  #e8f2fd;
+    --green:    #18a864;
+    --green-bg: #e6f7f0;
+    --red:      #e03e3e;
+    --red-bg:   #fdeaea;
+    --amber:    #d97b10;
+    --amber-bg: #fef3e2;
+    --font-ui:   'DM Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 700px;
+    overflow: hidden;
+  }
+
+  /* Header */
+  .header {
+    padding: 20px 24px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: flex-start;
+    justify-content: space-between; gap: 12px;
+  }
+  .header-left { flex: 1; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--blue); background: var(--blue-bg);
+    border: 1px solid rgba(26,127,232,.25); border-radius: 6px;
+    padding: 3px 9px; margin-bottom: 10px;
+  }
+  .header h1 { font-size: 20px; font-weight: 600; margin-bottom: 5px; }
+  .header p  { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .module-num {
+    font-family: var(--font-mono); font-size: 11px; color: var(--faint);
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 12px; white-space: nowrap; flex-shrink: 0;
+  }
+
+  /* Scene */
+  .scene-wrap { padding: 20px 24px 4px; position: relative; }
+  #scene-svg  { display: block; width: 100%; }
+  /* packet overlay sits directly on top of the SVG */
+  #pkt-layer  {
+    position: absolute; top: 20px; left: 24px;
+    width: calc(100% - 48px); height: 0;
+    pointer-events: none; overflow: visible;
+  }
+  .pkt {
+    position: absolute; width: 10px; height: 10px;
+    border-radius: 50%; opacity: 0; transition: none;
+  }
+
+  /* Steps */
+  .steps { display: flex; gap: 6px; padding: 14px 24px 0; flex-wrap: wrap; }
+  .step {
+    font-family: var(--font-mono); font-size: 10px;
+    padding: 3px 10px; border-radius: 20px;
+    border: 1px solid var(--border); color: var(--faint); background: var(--surface2);
+    transition: all .2s;
+  }
+  .step.active { border-color: var(--blue);  color: var(--blue);  background: var(--blue-bg); }
+  .step.done   { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+
+  /* Log */
+  .log {
+    font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 14px; margin: 14px 24px 0;
+    min-height: 36px; line-height: 1.5; transition: color .2s;
+  }
+  .log .prefix { color: var(--faint); }
+  .log.success { color: var(--green); }
+  .log.fail    { color: var(--red); }
+
+  /* Timings */
+  .timings {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px; padding: 14px 24px 0;
+  }
+  .t-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px;
+  }
+  .t-label { font-size: 10px; color: var(--muted); margin-bottom: 6px; font-family: var(--font-mono); }
+  .t-track { height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; margin-bottom: 6px; }
+  .t-bar   { height: 100%; border-radius: 3px; width: 0%; transition: width .6s ease; }
+  .t-val   { font-size: 17px; font-weight: 600; font-family: var(--font-mono); }
+  .t-unit  { font-size: 10px; color: var(--muted); }
+  #bar-hit  { background: var(--green); } #val-hit  { color: var(--green); }
+  #bar-miss { background: var(--red);   } #val-miss { color: var(--red);   }
+  #bar-cdn  { background: var(--blue);  } #val-cdn  { color: var(--blue);  }
+
+  /* Controls */
+  .controls { display: flex; gap: 8px; padding: 14px 24px; flex-wrap: wrap; }
+  .btn {
+    font-family: var(--font-ui); font-size: 12px; font-weight: 500;
+    padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface2); color: var(--text);
+    transition: all .15s; display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: #edf0f5; border-color: var(--border2); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+  .btn.green { background: var(--green-bg); border-color: rgba(24,168,100,.4);  color: var(--green); }
+  .btn.red   { background: var(--red-bg);   border-color: rgba(224,62,62,.4);   color: var(--red); }
+  .btn.blue  { background: var(--blue-bg);  border-color: rgba(26,127,232,.4);  color: var(--blue); }
+  .btn.auto  { background: var(--amber-bg); border-color: rgba(217,123,16,.5);  color: var(--amber); }
+
+  /* Legend */
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; padding: 0 24px 16px; }
+  .leg-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--faint); }
+  .leg-dot  { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Concepts */
+  .concepts {
+    border-top: 1px solid var(--border); padding: 16px 24px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
+  }
+  .concept-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px;
+  }
+  .concept p { font-size: 11px; color: var(--faint); line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="tag">⚡ Engineering Refresh</div>
+      <h1>Caching &amp; CDN</h1>
+      <p>Why one in-memory lookup at 5ms beats a DB query at 120ms — every time.</p>
+    </div>
+    <div class="module-num">Module 03 / 12</div>
+  </div>
+
+  <!-- Scene: pure SVG, all nodes drawn inside -->
+  <div class="scene-wrap" id="scene-wrap">
+    <svg id="scene-svg" viewBox="0 0 652 175" xmlns="http://www.w3.org/2000/svg">
+
+      <!-- dashed connector lines -->
+      <line x1="72"  y1="37" x2="130" y2="37" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="208" y1="37" x2="266" y2="37" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="344" y1="37" x2="402" y2="37" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <!-- return dashed lines to response -->
+      <line x1="170" y1="64" x2="38"  y2="140" stroke="#e2e6ef" stroke-width="0.8" stroke-dasharray="3 3"/>
+      <line x1="306" y1="64" x2="38"  y2="148" stroke="#e2e6ef" stroke-width="0.8" stroke-dasharray="3 3"/>
+      <line x1="442" y1="64" x2="38"  y2="156" stroke="#e2e6ef" stroke-width="0.8" stroke-dasharray="3 3"/>
+
+      <!-- NODE: Client  (x=10, cx=41) -->
+      <g id="n-client">
+        <rect id="r-client" x="10"  y="10" width="62" height="54" rx="12" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="41"  y="40" text-anchor="middle" dominant-baseline="central" font-size="24">🖥</text>
+        <text x="41"  y="76" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#5a6478">Client</text>
+      </g>
+
+      <!-- NODE: CDN  (x=138, cx=169) -->
+      <g id="n-cdn">
+        <rect id="r-cdn" x="138" y="10" width="62" height="54" rx="12" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="169" y="40" text-anchor="middle" dominant-baseline="central" font-size="24">🌐</text>
+        <text x="169" y="76" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#5a6478">CDN</text>
+        <text x="169" y="88" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#9aa3b5">edge server</text>
+      </g>
+
+      <!-- NODE: Redis  (x=274, cx=305) -->
+      <g id="n-cache">
+        <rect id="r-cache" x="274" y="10" width="62" height="54" rx="12" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="305" y="40" text-anchor="middle" dominant-baseline="central" font-size="24">⚡</text>
+        <text x="305" y="76" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#5a6478">Redis cache</text>
+        <text x="305" y="88" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#9aa3b5">in-memory</text>
+      </g>
+
+      <!-- NODE: Database  (x=410, cx=441) -->
+      <g id="n-db">
+        <rect id="r-db" x="410" y="10" width="62" height="54" rx="12" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="441" y="40" text-anchor="middle" dominant-baseline="central" font-size="24">🗄</text>
+        <text x="441" y="76" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#5a6478">Database</text>
+        <text x="441" y="88" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#9aa3b5">disk I/O</text>
+      </g>
+
+      <!-- NODE: Response (x=10, cx=41, y=120) -->
+      <g id="n-resp">
+        <rect id="r-resp" x="10" y="120" width="46" height="44" rx="10" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="33" y="143" text-anchor="middle" dominant-baseline="central" font-size="18" fill="#9aa3b5">✓</text>
+      </g>
+      <text x="64" y="147" font-family="'DM Sans',sans-serif" font-size="10" fill="#9aa3b5" dominant-baseline="central">Response received</text>
+
+    </svg>
+
+    <!-- Packet animation layer (positioned over SVG) -->
+    <div id="pkt-layer">
+      <div id="pkt"  class="pkt"></div>
+      <div id="pkt2" class="pkt"></div>
+    </div>
+  </div>
+
+  <!-- Steps -->
+  <div class="steps">
+    <span class="step" id="s0">1 · request sent</span>
+    <span class="step" id="s1">2 · cache lookup</span>
+    <span class="step" id="s2">3 · response</span>
+    <span class="step" id="s3">4 · done</span>
+  </div>
+
+  <!-- Log -->
+  <div class="log" id="log"><span class="prefix">$ </span><span id="log-txt">Select a scenario below to start ↓</span></div>
+
+  <!-- Timing bars -->
+  <div class="timings">
+    <div class="t-card">
+      <div class="t-label">cache hit</div>
+      <div class="t-track"><div class="t-bar" id="bar-hit"></div></div>
+      <span class="t-val" id="val-hit">—</span><span class="t-unit"> ms</span>
+    </div>
+    <div class="t-card">
+      <div class="t-label">cache miss</div>
+      <div class="t-track"><div class="t-bar" id="bar-miss"></div></div>
+      <span class="t-val" id="val-miss">—</span><span class="t-unit"> ms</span>
+    </div>
+    <div class="t-card">
+      <div class="t-label">cdn hit</div>
+      <div class="t-track"><div class="t-bar" id="bar-cdn"></div></div>
+      <span class="t-val" id="val-cdn">—</span><span class="t-unit"> ms</span>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="btn green" id="btn-hit"  onclick="run('hit')">⚡ Cache HIT</button>
+    <button class="btn red"   id="btn-miss" onclick="run('miss')">🗄 Cache MISS</button>
+    <button class="btn blue"  id="btn-cdn"  onclick="run('cdn')">🌐 CDN HIT</button>
+    <button class="btn auto"  id="btn-auto" onclick="runAuto()">▶ Auto demo</button>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:#1a7fe8"></div>Request packet</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#18a864"></div>Cache hit response</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#e03e3e"></div>Cache miss path</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#1a7fe8"></div>CDN edge hit</div>
+  </div>
+
+  <!-- Concepts -->
+  <div class="concepts">
+    <div class="concept">
+      <div class="concept-title">Cache hit</div>
+      <p>Redis returns data from RAM in ~1ms. DB never queried. Feed latency target &lt;200ms easily met.</p>
+    </div>
+    <div class="concept">
+      <div class="concept-title">Cache miss</div>
+      <p>Key not in Redis. DB does full disk read (~100ms). Result written back to Redis for next request.</p>
+    </div>
+    <div class="concept">
+      <div class="concept-title">CDN edge</div>
+      <p>Static assets (images, JS) served from a server near the user. Origin never hit.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// SVG viewBox: 652 x 175
+// Centre points of each node in SVG space
+const SVG_W = 652, SVG_H = 175;
+const C = {
+  client: { x: 41,  y: 37 },
+  cdn:    { x: 169, y: 37 },
+  cache:  { x: 305, y: 37 },
+  db:     { x: 441, y: 37 },
+  resp:   { x: 33,  y: 142 }
+};
+
+function toScreen(svgX, svgY) {
+  const svg  = document.getElementById('scene-svg');
+  const wrap = document.getElementById('scene-wrap');
+  const sr   = svg.getBoundingClientRect();
+  const wr   = wrap.getBoundingClientRect();
+  const sx   = sr.width  / SVG_W;
+  const sy   = sr.height / SVG_H;
+  return {
+    x: (sr.left - wr.left) + svgX * sx,
+    y: (sr.top  - wr.top)  + svgY * sy
+  };
+}
+
+let busy = false;
+
+const nodeColors = {
+  '':        { fill: '#f5f7fa', stroke: '#dde1ea' },
+  active:    { fill: '#e8f2fd', stroke: '#1a7fe8' },
+  hit:       { fill: '#e6f7f0', stroke: '#18a864' },
+  miss:      { fill: '#fdeaea', stroke: '#e03e3e' },
+  'cdn-hit': { fill: '#dceeff', stroke: '#1a7fe8' }
+};
+
+function setNode(id, state) {
+  const r = document.getElementById('r-' + id);
+  if (!r) return;
+  const c = nodeColors[state] || nodeColors[''];
+  r.style.fill   = c.fill;
+  r.style.stroke = c.stroke;
+  r.style.transition = 'fill .25s, stroke .25s';
+}
+
+function resetAll() {
+  ['client','cdn','cache','db','resp'].forEach(id => setNode(id, ''));
+  setStep(-1);
+}
+
+function setStep(active) {
+  for (let i = 0; i < 4; i++) {
+    const s = document.getElementById('s' + i);
+    s.className = 'step' + (i < active ? ' done' : i === active ? ' active' : '');
+  }
+}
+
+function setLog(msg, cls) {
+  const el = document.getElementById('log');
+  el.className = 'log' + (cls ? ' ' + cls : '');
+  document.getElementById('log-txt').textContent = msg;
+}
+
+function setBar(id, pct, val) {
+  document.getElementById('bar-' + id).style.width = pct + '%';
+  document.getElementById('val-' + id).textContent = val;
+}
+
+function allBtns(disabled) {
+  ['btn-hit','btn-miss','btn-cdn','btn-auto'].forEach(id =>
+    document.getElementById(id).disabled = disabled
+  );
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function movePkt(id, fromKey, toKey, color, ms) {
+  return new Promise(resolve => {
+    const el   = document.getElementById(id);
+    const from = toScreen(C[fromKey].x, C[fromKey].y);
+    const to   = toScreen(C[toKey].x,   C[toKey].y);
+    el.style.background = color;
+    el.style.transition = 'none';
+    el.style.left    = (from.x - 5) + 'px';
+    el.style.top     = (from.y - 5) + 'px';
+    el.style.opacity = '1';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.style.transition = `left ${ms}ms linear, top ${ms}ms linear`;
+      el.style.left = (to.x - 5) + 'px';
+      el.style.top  = (to.y - 5) + 'px';
+      setTimeout(() => { el.style.opacity = '0'; resolve(); }, ms);
+    }));
+  });
+}
+
+async function run(type) {
+  if (busy) return;
+  busy = true;
+  allBtns(true);
+  resetAll();
+
+  if (type === 'cdn') {
+    setLog('Requesting static asset (image / JS file)...'); setStep(0);
+    setNode('client', 'active');
+    await movePkt('pkt', 'client', 'cdn', '#1a7fe8', 380);
+    setStep(1); setNode('cdn', 'cdn-hit');
+    setLog('CDN edge server has the asset cached — no origin call needed.');
+    await delay(360);
+    await movePkt('pkt2', 'cdn', 'resp', '#1a7fe8', 380);
+    setStep(3); setNode('resp', 'hit');
+    setBar('cdn', 6, '8');
+    setLog('✓ CDN HIT — 8ms. Served from edge. Zero origin load.', 'success');
+
+  } else if (type === 'hit') {
+    setLog('API request arrives at server...'); setStep(0);
+    setNode('client', 'active');
+    await movePkt('pkt', 'client', 'cdn', '#1a7fe8', 280);
+    setNode('cdn', 'active');
+    await movePkt('pkt', 'cdn', 'cache', '#1a7fe8', 300);
+    setStep(1); setNode('cdn', ''); setNode('cache', 'active');
+    await delay(180);
+    setNode('cache', 'hit');
+    setLog('Redis key found — returning from memory. DB never touched.');
+    setStep(2);
+    await movePkt('pkt2', 'cache', 'resp', '#18a864', 460);
+    setStep(3); setNode('resp', 'hit');
+    setBar('hit', 4, '5');
+    setLog('✓ Cache HIT — 5ms. Redis served it instantly. DB load = 0.', 'success');
+
+  } else {
+    setLog('API request arrives... checking Redis...'); setStep(0);
+    setNode('client', 'active');
+    await movePkt('pkt', 'client', 'cdn', '#1a7fe8', 280);
+    setNode('cdn', 'active');
+    await movePkt('pkt', 'cdn', 'cache', '#1a7fe8', 300);
+    setStep(1); setNode('cdn', ''); setNode('cache', 'miss');
+    setLog('Cache MISS — key not found. Falling back to database...');
+    await delay(260);
+    await movePkt('pkt', 'cache', 'db', '#e03e3e', 380);
+    setStep(2); setNode('cache', ''); setNode('db', 'active');
+    await delay(320);
+    setNode('db', 'hit');
+    setLog('DB query complete. Writing result to Redis (warmed for next request).');
+    await movePkt('pkt2', 'db', 'resp', '#e03e3e', 520);
+    setStep(3); setNode('resp', 'miss');
+    setBar('miss', 100, '120');
+    setLog('✗ Cache MISS — 120ms. Disk I/O hurt. Redis now warmed.', 'fail');
+  }
+
+  busy = false;
+  allBtns(false);
+}
+
+async function runAuto() {
+  if (busy) return;
+  for (const s of ['cdn', 'hit', 'miss', 'hit', 'hit']) {
+    await run(s);
+    await delay(700);
+  }
+}
+
+resetAll();
+</script>
+</body>
+</html>
