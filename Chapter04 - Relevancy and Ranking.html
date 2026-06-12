@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 4 — Relevancy & Ranking | Engineering Refresh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #f0f2f5;
+    --surface:   #ffffff;
+    --surface2:  #f5f7fa;
+    --border:    #dde1ea;
+    --border2:   #c4cad8;
+    --text:      #1a1f2e;
+    --muted:     #5a6478;
+    --faint:     #9aa3b5;
+    --blue:      #1a7fe8;
+    --blue-bg:   #e8f2fd;
+    --green:     #18a864;
+    --green-bg:  #e6f7f0;
+    --red:       #e03e3e;
+    --red-bg:    #fdeaea;
+    --amber:     #d97b10;
+    --amber-bg:  #fef3e2;
+    --purple:    #7c3aed;
+    --purple-bg: #f3f0ff;
+    --font-ui:   'DM Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: none;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 700px;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  .header {
+    padding: 18px 24px 16px;
+    border-bottom: none;
+    display: flex; align-items: flex-start;
+    justify-content: space-between; gap: 12px;
+  }
+  .header-left { flex: 1; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--blue); background: var(--blue-bg);
+    border: 1px solid rgba(26,127,232,.25); border-radius: 6px;
+    padding: 3px 9px; margin-bottom: 8px;
+  }
+  .header h1 { font-size: 19px; font-weight: 600; margin-bottom: 3px; }
+  .header p  { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+  .module-num {
+    font-family: var(--font-mono); font-size: 11px; color: var(--faint);
+    background: var(--surface2); border: none;
+    border-radius: 8px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  /* ── Audio toggle ── */
+  .audio-ctrl {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface2); border: none;
+    border-radius: 8px; padding: 5px 10px; cursor: pointer;
+    font-size: 11px; color: var(--muted); transition: all .35s ease;
+    user-select: none;
+  }
+  .audio-ctrl:hover { border-color: var(--border2); background: #edf0f5; }
+  .audio-ctrl.on { background: var(--blue-bg); border-color: rgba(26,127,232,.4); color: var(--blue); }
+  .audio-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); transition: background .2s; }
+  .audio-ctrl.on .audio-dot { background: var(--blue); animation: pulse 2.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.3);opacity:.6} }
+
+  /* ── Step progress bar ── */
+  .progress-bar {
+    display: flex; gap: 0;
+    border-bottom: none;
+  }
+  .prog-step {
+    flex: 1; padding: 8px 0; text-align: center;
+    font-family: var(--font-mono); font-size: 9px;
+    color: var(--faint); background: var(--surface2);
+    border-right: none;
+    transition: all .7s cubic-bezier(0.4,0,0.2,1); cursor: default;
+  }
+  .prog-step:last-child { border-right: none; }
+  .prog-step.active { background: var(--blue-bg); color: var(--blue); font-weight: 500; }
+  .prog-step.done   { background: var(--green-bg); color: var(--green); }
+  .prog-step.warn   { background: var(--red-bg);   color: var(--red); }
+
+  /* ── Screen container ── */
+  .screen-wrap { min-height: 340px; position: relative; }
+
+  /* Each screen fades in */
+  .screen {
+    display: none;
+    padding: 20px 24px;
+    animation: fadeIn .9s cubic-bezier(0.22,0.61,0.36,1);
+  }
+  .screen.active { display: block; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ── Narrator bubble ── */
+  .narrator {
+    padding: 10px 14px; margin-bottom: 16px;
+    background: var(--blue-bg); border: none;
+    border-radius: 10px; font-size: 12px; color: var(--blue); line-height: 1.6;
+    display: none; align-items: flex-start; gap: 8px;
+  }
+  .narrator.visible { display: flex; }
+  .narrator-icon { font-size: 15px; flex-shrink: 0; }
+  .speaking-dots span {
+    display: inline-block; width: 4px; height: 4px; border-radius: 50%;
+    background: var(--blue); margin: 0 1px; vertical-align: middle;
+    animation: bounce 1.8s ease-in-out infinite;
+  }
+  .speaking-dots span:nth-child(2) { animation-delay: .2s; }
+  .speaking-dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+
+  /* ── Screen titles ── */
+  .screen-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+  .screen-sub   { font-size: 12px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+
+  /* ── Stat callouts ── */
+  .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat-card {
+    background: var(--surface2); border: none;
+    border-radius: 10px; padding: 12px 14px;
+    transition: border-color .7s cubic-bezier(0.4,0,0.2,1), background .7s cubic-bezier(0.4,0,0.2,1);
+  }
+  .stat-card.good { border-color: var(--green); background: var(--green-bg); }
+  .stat-card.bad  { border-color: var(--red);   background: var(--red-bg); }
+  .stat-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+  .stat-card.good .stat-label { color: var(--green); }
+  .stat-card.bad  .stat-label { color: var(--red); }
+  .stat-val   { font-size: 22px; font-weight: 600; font-family: var(--font-mono); color: var(--text); }
+  .stat-card.good .stat-val { color: var(--green); }
+  .stat-card.bad  .stat-val { color: var(--red); }
+  .stat-note  { font-size: 10px; color: var(--faint); margin-top: 4px; }
+  .stat-card.good .stat-note { color: var(--green); opacity: .8; }
+  .stat-card.bad  .stat-note { color: var(--red);   opacity: .8; }
+
+  /* ── Verdict banner ── */
+  .verdict {
+    border-radius: 10px; padding: 14px 16px;
+    display: flex; align-items: flex-start; gap: 12px;
+    font-size: 13px; line-height: 1.5;
+  }
+  .verdict.success { background: var(--green-bg); border: none; color: var(--green); }
+  .verdict.fail    { background: var(--red-bg);   border: 1px solid rgba(224,62,62,.3); color: var(--red); }
+  .verdict-icon  { font-size: 20px; flex-shrink: 0; }
+  .verdict-title { font-weight: 600; font-size: 14px; margin-bottom: 3px; }
+  .verdict-body  { font-size: 12px; opacity: .85; }
+
+  /* ── Inline pill ── */
+  .pill {
+    display: inline-flex; align-items: center;
+    font-family: var(--font-mono); font-size: 9px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px; vertical-align: middle; margin-left: 4px;
+  }
+  .pill.green  { background: var(--green-bg);  color: var(--green); }
+  .pill.red    { background: var(--red-bg);    color: var(--red); }
+  .pill.blue   { background: var(--blue-bg);   color: var(--blue); }
+  .pill.purple { background: var(--purple-bg); color: var(--purple); }
+
+  /* ── Divider ── */
+  .divider { height: 1px; background: transparent; margin: 14px 0; }
+
+  /* ── Footer nav ── */
+  .footer {
+    padding: 14px 24px;
+    border-top: none;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    flex-wrap: wrap;
+  }
+  .footer-left  { display: flex; gap: 8px; flex-wrap: wrap; }
+  .footer-right { display: flex; gap: 8px; }
+
+  .btn {
+    font-family: var(--font-ui); font-size: 12px; font-weight: 500;
+    padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    border: none; background: var(--surface2); color: var(--text);
+    transition: all .35s cubic-bezier(0.4,0,0.2,1); display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: #edf0f5; border-color: var(--border2); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+  .btn.green  { background: var(--green-bg);  color: var(--green); }
+  .btn.red    { background: var(--red-bg);    color: var(--red); }
+  .btn.blue   { background: var(--blue-bg);   color: var(--blue); }
+  .btn.purple { background: var(--purple-bg); color: var(--purple); }
+  .btn.amber  { background: var(--amber-bg);  color: var(--amber); }
+  .btn.ghost  { background: transparent; border-color: var(--border); color: var(--muted); }
+
+  /* ── Intro screen ── */
+  .intro-screen {
+    background: var(--surface);
+    padding: 20px 24px 18px;
+    position: relative;
+  }
+  .intro-cards {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    margin-bottom: 12px;
+  }
+  .intro-card {
+    background: var(--surface2);
+    border: none;
+    border-radius: 10px; padding: 10px 12px;
+    position: relative; overflow: hidden;
+  }
+  .intro-card::after {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--card-glow, var(--blue)), transparent);
+    border-radius: 10px 10px 0 0;
+  }
+  .intro-card:nth-child(1) { --card-glow: var(--blue); }
+  .intro-card:nth-child(2) { --card-glow: var(--purple); }
+  .intro-card:nth-child(3) { --card-glow: var(--green); }
+  .intro-card:nth-child(4) { --card-glow: var(--amber); }
+  .intro-card-icon  { font-size: 18px; margin-bottom: 5px; display: block; }
+  .intro-card-title { font-size: 11.5px; font-weight: 600; color: var(--text); margin-bottom: 3px; line-height: 1.2; }
+  .intro-card-text  { font-size: 10px; color: var(--muted); line-height: 1.5; }
+
+  .intro-inspiration {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--green-bg);
+    border: none;
+    border-left: 3px solid var(--green);
+    border-radius: 10px; padding: 11px 13px;
+    margin-bottom: 12px;
+  }
+  .intro-insp-icon  { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+  .intro-insp-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: .07em; text-transform: uppercase;
+    color: var(--green); margin-bottom: 4px;
+  }
+  .intro-insp-text { font-size: 11px; color: var(--muted); line-height: 1.55; }
+
+  .narrator-dark {
+    padding: 9px 13px; margin-bottom: 12px;
+    background: var(--blue-bg); border: none;
+    border-radius: 10px; font-size: 12px; color: var(--blue); line-height: 1.5;
+    display: none; align-items: flex-start; gap: 8px;
+  }
+  .narrator-dark.visible { display: flex; }
+
+  /* ── Dynamic header transitions ── */
+  .header h1 { transition: opacity .65s cubic-bezier(0.4,0,0.2,1), transform .65s cubic-bezier(0.4,0,0.2,1); }
+  .header p  { transition: opacity .65s cubic-bezier(0.4,0,0.2,1), transform .65s cubic-bezier(0.4,0,0.2,1); }
+  .header h1.fading, .header p.fading { opacity: 0; transform: translateY(-4px); }
+  .module-num { transition: opacity .5s ease; }
+  .module-num.fading { opacity: 0; }
+
+  /* ── Intro card staggered entry ── */
+  @keyframes cardEntry {
+    from { opacity: 0; transform: translateY(28px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .intro-card.animating {
+    opacity: 0;
+    animation: cardEntry 1.6s cubic-bezier(0.22,0.61,0.36,1) forwards;
+  }
+  .intro-card.animating:nth-child(1) { animation-delay: .15s; }
+  .intro-card.animating:nth-child(2) { animation-delay: .45s; }
+  .intro-card.animating:nth-child(3) { animation-delay: .75s; }
+  .intro-card.animating:nth-child(4) { animation-delay: 1.05s; }
+
+  @keyframes inspEntry {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .intro-inspiration.animating {
+    opacity: 0;
+    animation: inspEntry 1s cubic-bezier(0.22,0.61,0.36,1) 1.35s forwards;
+  }
+
+  /* ── Screen slide transitions ── */
+  @keyframes slideOut {
+    from { opacity: 1; transform: translateX(0); }
+    to   { opacity: 0; transform: translateX(-28px); }
+  }
+  .screen.sliding-out {
+    display: block !important;
+    animation: slideOut .7s cubic-bezier(0.4,0,1,1) forwards;
+    pointer-events: none;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(28px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .screen.slide-in {
+    animation: slideIn .8s cubic-bezier(0.22,0.61,0.36,1) forwards !important;
+  }
+
+  /* ── Cinematic overlay ── */
+  #cinematic-overlay {
+    position: fixed; inset: 0; z-index: 9999;
+    background: var(--surface);
+    opacity: 0; pointer-events: none;
+    transition: opacity .7s cubic-bezier(0.4,0,0.2,1);
+  }
+  #cinematic-overlay.fade-in  { opacity: 1; pointer-events: all; }
+  #cinematic-overlay.fade-out { opacity: 0; pointer-events: none; }
+
+  /* ── Feed post items ── */
+  .feed-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .feed-post {
+    background: var(--surface2); border-radius: 10px; padding: 10px 13px;
+    border: none; display: flex; align-items: flex-start; gap: 10px;
+    transition: all .6s cubic-bezier(0.4,0,0.2,1);
+  }
+  .feed-post.ranked  { border-color: var(--blue);   background: var(--blue-bg);   transform: translateY(-1px); }
+  .feed-post.top     { border-color: var(--green);  background: var(--green-bg);  transform: translateY(-2px); }
+  .feed-post.demoted { border-color: var(--faint);  opacity: .45; }
+  .post-avatar { font-size: 22px; flex-shrink: 0; }
+  .post-body { flex: 1; }
+  .post-user { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+  .post-text { font-size: 12px; color: var(--text); line-height: 1.5; margin-bottom: 5px; }
+  .post-signals { display: flex; gap: 10px; }
+  .post-signal { font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
+  .post-signal.hot { color: var(--amber); }
+  .post-rank {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+    flex-shrink: 0; align-self: center;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--border); color: var(--muted);
+    display: flex; align-items: center; justify-content: center;
+    transition: all .6s cubic-bezier(0.4,0,0.2,1);
+  }
+  .feed-post.top     .post-rank { background: var(--green); color: #fff; }
+  .feed-post.ranked  .post-rank { background: var(--blue);  color: #fff; }
+  .feed-post.demoted .post-rank { background: var(--border); color: var(--faint); }
+
+  /* ── Score formula ── */
+  .formula-box {
+    background: #1a1f2e; border-radius: 10px; padding: 13px 16px;
+    font-family: var(--font-mono); font-size: 11px; line-height: 2;
+    color: #c9d1d9; margin-bottom: 14px; overflow-x: auto;
+  }
+  .f-kw  { color: #ff7b72; }
+  .f-fn  { color: #79c0ff; }
+  .f-num { color: #f2cc60; }
+  .f-cmt { color: #6e7681; }
+  .f-grn { color: #7ee787; }
+
+  /* ── Signal weight bars ── */
+  .signals-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .signal-row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .signal-label {
+    font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+    width: 130px; flex-shrink: 0;
+  }
+  .signal-bar-wrap {
+    flex: 1; height: 10px; background: var(--surface2);
+    border-radius: 6px; overflow: hidden;
+  }
+  .signal-bar {
+    height: 100%; border-radius: 6px;
+    transition: width 1.1s cubic-bezier(0.4,0,0.2,1);
+  }
+  .signal-pct {
+    font-family: var(--font-mono); font-size: 10px;
+    color: var(--muted); width: 34px; text-align: right; flex-shrink: 0;
+  }
+
+  /* ── Pipeline diagram ── */
+  .pipeline-row {
+    display: flex; align-items: center; gap: 0;
+    margin-bottom: 10px; overflow-x: auto;
+  }
+  .pipe-node {
+    flex-shrink: 0; background: var(--surface2);
+    border: none; border-radius: 9px;
+    padding: 8px 11px; text-align: center; min-width: 80px;
+    transition: all .5s cubic-bezier(0.4,0,0.2,1);
+  }
+  .pipe-node.active { background: var(--blue-bg); border-color: var(--blue); transform: translateY(-2px); }
+  .pipe-node.done   { background: var(--green-bg); border-color: var(--green); }
+  .pipe-node-icon  { font-size: 16px; display: block; margin-bottom: 3px; }
+  .pipe-node-label { font-family: var(--font-mono); font-size: 9px; color: var(--muted); }
+  .pipe-node.active .pipe-node-label { color: var(--blue); }
+  .pipe-node.done   .pipe-node-label { color: var(--green); }
+  .pipe-arrow {
+    flex-shrink: 0; width: 20px; text-align: center;
+    font-size: 12px; color: var(--faint);
+  }
+  .pipe-arrow.active { color: var(--blue); }
+
+  /* ── Comparison table ── */
+  .compare-table {
+    width: 100%; border-collapse: collapse;
+    font-family: var(--font-mono); font-size: 10.5px; margin-bottom: 12px;
+  }
+  .compare-table th {
+    padding: 7px 12px; text-align: left;
+    background: var(--surface2); color: var(--muted);
+    border: none; font-weight: 500;
+    text-transform: uppercase; letter-spacing: .06em; font-size: 9px;
+  }
+  .compare-table td {
+    padding: 8px 12px; border: none;
+    color: var(--text); vertical-align: top; line-height: 1.5;
+    transition: background .5s ease;
+  }
+  .compare-table tr.hl-row td { background: var(--blue-bg); color: var(--blue); }
+  .compare-table tr.good-row td { background: var(--green-bg); color: var(--green); }
+  .compare-table tr.bad-row  td { background: var(--red-bg);   color: var(--red); }
+  .compare-table td:first-child { font-weight: 500; color: var(--muted); font-size: 9.5px; white-space: nowrap; }
+
+  /* ── Concepts grid ── */
+  .concepts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .concept-card {
+    background: var(--surface2); border: none;
+    border-radius: 10px; padding: 12px;
+  }
+  .concept-icon  { font-size: 18px; margin-bottom: 6px; }
+  .concept-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+  }
+  .concept-body { font-size: 11px; color: var(--faint); line-height: 1.5; }
+</style>
+</head>
+<body>
+<div id="cinematic-overlay"></div>
+<div class="card">
+
+  <!-- ── Header ── -->
+  <div class="header">
+    <div class="header-left">
+      <div class="tag">🗄 Engineering Refresh</div>
+      <h1 id="header-title">Relevancy &amp; Ranking</h1>
+      <p id="header-sub">From chronological feeds to ML-driven scoring — and why order matters.</p>
+    </div>
+    <div class="header-right">
+      <div class="module-num" id="module-num">Chapter 04</div>
+      <div class="audio-ctrl on" id="audio-ctrl" onclick="toggleAudio()">
+        <div class="audio-dot" style="background:var(--blue);animation:pulse 1.2s ease-in-out infinite"></div>
+        <span id="audio-label">Audio on</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step progress ── -->
+  <div class="progress-bar" id="progress-bar">
+    <div class="prog-step active" id="prog-0">Purpose</div>
+    <div class="prog-step"        id="prog-1">1 · Chrono</div>
+    <div class="prog-step"        id="prog-2">2 · Overload</div>
+    <div class="prog-step"        id="prog-3">3 · ML Score</div>
+    <div class="prog-step"        id="prog-4">4 · Pipeline</div>
+    <div class="prog-step"        id="prog-5">5 · Signals</div>
+    <div class="prog-step"        id="prog-6">6 · Summary</div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 0 — Purpose / Intro
+  ═════════════════════════════════════ -->
+  <div class="screen active" id="screen-0">
+    <div class="intro-screen">
+      <div class="narrator-dark" id="narrator"><div class="narrator-icon">🎙</div><div><span id="narrator-text"></span><span class="speaking-dots" id="speaking-dots" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+      <div class="intro-cards">
+        <div class="intro-card">
+          <span class="intro-card-icon">📊</span>
+          <div class="intro-card-title">Order is Everything</div>
+          <div class="intro-card-text">What you see first shapes what you engage with. Feed order is a product decision with enormous impact.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">🧠</span>
+          <div class="intro-card-title">ML at the Core</div>
+          <div class="intro-card-text">Modern feeds are powered by machine learning models scoring thousands of candidate posts in milliseconds.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">⚡</span>
+          <div class="intro-card-title">Real-Time Signals</div>
+          <div class="intro-card-text">Likes, shares, watch time, comments — every interaction is a signal that shapes future rankings instantly.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">🎯</span>
+          <div class="intro-card-title">Personalisation</div>
+          <div class="intro-card-text">Your feed is unique. Two users following the same accounts see different content, ranked for their behaviour.</div>
+        </div>
+      </div>
+
+      <div class="intro-inspiration">
+        <div class="intro-insp-icon">🚀</div>
+        <div class="intro-insp-body">
+          <div class="intro-insp-title">Why ranking matters</div>
+          <div class="intro-insp-text">Facebook, Instagram, TikTok, and LinkedIn all moved from chronological feeds to ranked feeds — because relevancy beats recency at scale. We will trace that exact evolution and build the scoring system that powers it.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 1 — Chronological Feed
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-1">
+    <div class="narrator" id="narrator-1"><div class="narrator-icon">🎙</div><div><span id="narrator-text-1"></span><span class="speaking-dots" id="speaking-dots-1" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Chronological Feed <span class="pill green">Simple</span></div>
+    <div class="screen-sub">Latest post first. Newest wins. Works perfectly with 30 users and low post frequency.</div>
+
+    <div class="feed-list" id="chrono-feed">
+      <div class="feed-post" id="cp-1">
+        <div class="post-avatar">👩‍💻</div>
+        <div class="post-body">
+          <div class="post-user">@sarah · just now</div>
+          <div class="post-text">Just deployed our new microservices architecture — latency dropped 80%! 🎉</div>
+          <div class="post-signals">
+            <span class="post-signal">❤️ 3</span>
+            <span class="post-signal">💬 1</span>
+          </div>
+        </div>
+        <div class="post-rank" id="cr-1">#1</div>
+      </div>
+      <div class="feed-post" id="cp-2">
+        <div class="post-avatar">👨‍🔬</div>
+        <div class="post-body">
+          <div class="post-user">@dan · 2 min ago</div>
+          <div class="post-text">Anyone else find async/await debugging surprisingly painful in prod?</div>
+          <div class="post-signals">
+            <span class="post-signal">❤️ 1</span>
+            <span class="post-signal">💬 4</span>
+          </div>
+        </div>
+        <div class="post-rank" id="cr-2">#2</div>
+      </div>
+      <div class="feed-post" id="cp-3">
+        <div class="post-avatar">🧑‍🎨</div>
+        <div class="post-body">
+          <div class="post-user">@maya · 5 min ago</div>
+          <div class="post-text">Here's my morning coffee and a blank Figma canvas. Design time ☕</div>
+          <div class="post-signals">
+            <span class="post-signal">❤️ 12</span>
+            <span class="post-signal">💬 8</span>
+          </div>
+        </div>
+        <div class="post-rank" id="cr-3">#3</div>
+      </div>
+    </div>
+
+    <div class="stats-row" id="s1-stats" style="display:none">
+      <div class="stat-card" id="s1-latency">
+        <div class="stat-label">Feed load time</div>
+        <div class="stat-val" id="s1-latency-val">—</div>
+        <div class="stat-note" id="s1-latency-note"></div>
+      </div>
+      <div class="stat-card" id="s1-eng">
+        <div class="stat-label">Avg. engagement rate</div>
+        <div class="stat-val" id="s1-eng-val">—</div>
+        <div class="stat-note" id="s1-eng-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 2 — The Breaking Point
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-2">
+    <div class="narrator" id="narrator-2"><div class="narrator-icon">🎙</div><div><span id="narrator-text-2"></span><span class="speaking-dots" id="speaking-dots-2" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Same Feed — 100M+ DAU <span class="pill red">Breaking</span></div>
+    <div class="screen-sub">A user follows 500 people. 2,000 posts are created per second. Chronological order collapses.</div>
+
+    <div class="feed-list" id="overload-feed">
+      <div class="feed-post" id="op-1">
+        <div class="post-avatar">🤖</div>
+        <div class="post-body">
+          <div class="post-user">@spambot · 0.2s ago</div>
+          <div class="post-text">Check out this AMAZING deal you won't believe!!! Click here 👇</div>
+          <div class="post-signals"><span class="post-signal">❤️ 0</span><span class="post-signal">💬 0</span></div>
+        </div>
+        <div class="post-rank" id="or-1">#1</div>
+      </div>
+      <div class="feed-post" id="op-2">
+        <div class="post-avatar">📢</div>
+        <div class="post-body">
+          <div class="post-user">@brandaccount · 0.5s ago</div>
+          <div class="post-text">Our quarterly report is now live. Download the PDF at link in bio.</div>
+          <div class="post-signals"><span class="post-signal">❤️ 2</span><span class="post-signal">💬 0</span></div>
+        </div>
+        <div class="post-rank" id="or-2">#2</div>
+      </div>
+      <div class="feed-post" id="op-3">
+        <div class="post-avatar">👩‍💻</div>
+        <div class="post-body">
+          <div class="post-user">@sarah · 1 min ago</div>
+          <div class="post-text">Just deployed our new microservices architecture — latency dropped 80%! 🎉</div>
+          <div class="post-signals"><span class="post-signal">❤️ 847</span><span class="post-signal hot">🔥 Trending</span></div>
+        </div>
+        <div class="post-rank" id="or-3">#47</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="stats-row" id="s2-stats">
+      <div class="stat-card bad" id="s2-scroll">
+        <div class="stat-label">Posts before seeing relevant content</div>
+        <div class="stat-val">40+</div>
+        <div class="stat-note">✗ Users abandon before reaching quality</div>
+      </div>
+      <div class="stat-card bad" id="s2-eng">
+        <div class="stat-label">Engagement rate vs chronological</div>
+        <div class="stat-val">−62%</div>
+        <div class="stat-note">✗ Good content buried under noise</div>
+      </div>
+      <div class="stat-card bad" id="s2-miss">
+        <div class="stat-label">High-signal posts user never sees</div>
+        <div class="stat-val">~80%</div>
+        <div class="stat-note">✗ Quality drowned out by volume</div>
+      </div>
+      <div class="stat-card bad" id="s2-churn">
+        <div class="stat-label">User churn risk</div>
+        <div class="stat-val">HIGH</div>
+        <div class="stat-note">✗ Irrelevant feeds → users leave</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 3 — ML Scoring
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-3">
+    <div class="narrator" id="narrator-3"><div class="narrator-icon">🎙</div><div><span id="narrator-text-3"></span><span class="speaking-dots" id="speaking-dots-3" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">The Fix — ML Scoring <span class="pill blue">Solution</span></div>
+    <div class="screen-sub">Every candidate post gets a relevancy score. Highest scores surface first — regardless of time.</div>
+
+    <!-- Score formula -->
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">📐 Ranking Score Formula</div>
+    <div class="formula-box">
+<span class="f-fn">score</span> = (
+  <span class="f-num">0.35</span> × <span class="f-grn">engagement_rate</span>   <span class="f-cmt">-- likes + comments + shares</span>
++ <span class="f-num">0.25</span> × <span class="f-grn">affinity_score</span>     <span class="f-cmt">-- how often user interacts with author</span>
++ <span class="f-num">0.20</span> × <span class="f-grn">recency_decay</span>      <span class="f-cmt">-- e^(-λt) — older posts score lower</span>
++ <span class="f-num">0.15</span> × <span class="f-grn">content_relevance</span>  <span class="f-cmt">-- topic match from user interest model</span>
++ <span class="f-num">0.05</span> × <span class="f-grn">diversity_boost</span>    <span class="f-cmt">-- avoid repeating the same author</span>
+)
+    </div>
+
+    <!-- Re-ranked feed -->
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">✨ Feed After ML Ranking</div>
+    <div class="feed-list" id="ranked-feed" style="display:none">
+      <div class="feed-post" id="rp-1">
+        <div class="post-avatar">👩‍💻</div>
+        <div class="post-body">
+          <div class="post-user">@sarah · 1 min ago</div>
+          <div class="post-text">Just deployed our new microservices architecture — latency dropped 80%! 🎉</div>
+          <div class="post-signals"><span class="post-signal hot">🔥 847 likes</span><span class="post-signal hot">📈 score: 0.94</span></div>
+        </div>
+        <div class="post-rank" id="rr-1">#1</div>
+      </div>
+      <div class="feed-post" id="rp-2">
+        <div class="post-avatar">👨‍🔬</div>
+        <div class="post-body">
+          <div class="post-user">@dan · 2 min ago</div>
+          <div class="post-text">Anyone else find async/await debugging surprisingly painful in prod?</div>
+          <div class="post-signals"><span class="post-signal">💬 128 comments</span><span class="post-signal hot">📈 score: 0.81</span></div>
+        </div>
+        <div class="post-rank" id="rr-2">#2</div>
+      </div>
+      <div class="feed-post demoted" id="rp-3">
+        <div class="post-avatar">🤖</div>
+        <div class="post-body">
+          <div class="post-user">@spambot · 0.2s ago (was #1)</div>
+          <div class="post-text">Check out this AMAZING deal you won't believe!!! Click here 👇</div>
+          <div class="post-signals"><span class="post-signal">❤️ 0</span><span class="post-signal">📉 score: 0.02</span></div>
+        </div>
+        <div class="post-rank" id="rr-3">▼</div>
+      </div>
+    </div>
+
+    <div class="stats-row" id="s3-stats" style="display:none">
+      <div class="stat-card" id="s3-eng">
+        <div class="stat-label">Engagement uplift</div>
+        <div class="stat-val" id="s3-eng-val">—</div>
+        <div class="stat-note" id="s3-eng-note"></div>
+      </div>
+      <div class="stat-card" id="s3-score">
+        <div class="stat-label">Scoring latency</div>
+        <div class="stat-val" id="s3-score-val">—</div>
+        <div class="stat-note" id="s3-score-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 4 — Ranking Pipeline
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-4">
+    <div class="narrator" id="narrator-4"><div class="narrator-icon">🎙</div><div><span id="narrator-text-4"></span><span class="speaking-dots" id="speaking-dots-4" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">The Ranking Pipeline <span class="pill purple">Deep Dive</span></div>
+    <div class="screen-sub">Scoring 50,000 candidates per feed request in under 150ms takes a multi-stage pipeline.</div>
+
+    <!-- Pipeline nodes -->
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">⚙️ Four-Stage Ranking Pipeline</div>
+    <div class="pipeline-row" id="pipeline">
+      <div class="pipe-node" id="pipe-0">
+        <span class="pipe-node-icon">🗃</span>
+        <span class="pipe-node-label">Candidate<br>Retrieval</span>
+      </div>
+      <div class="pipe-arrow" id="arr-0">→</div>
+      <div class="pipe-node" id="pipe-1">
+        <span class="pipe-node-icon">⚡</span>
+        <span class="pipe-node-label">Light<br>Filtering</span>
+      </div>
+      <div class="pipe-arrow" id="arr-1">→</div>
+      <div class="pipe-node" id="pipe-2">
+        <span class="pipe-node-icon">🧠</span>
+        <span class="pipe-node-label">ML<br>Scoring</span>
+      </div>
+      <div class="pipe-arrow" id="arr-2">→</div>
+      <div class="pipe-node" id="pipe-3">
+        <span class="pipe-node-icon">🎯</span>
+        <span class="pipe-node-label">Re-rank &amp;<br>Diversity</span>
+      </div>
+      <div class="pipe-arrow" id="arr-3">→</div>
+      <div class="pipe-node" id="pipe-4">
+        <span class="pipe-node-icon">📱</span>
+        <span class="pipe-node-label">Feed<br>Served</span>
+      </div>
+    </div>
+
+    <!-- Comparison table -->
+    <div id="s4-table" style="display:none">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">📋 Pipeline Stage Breakdown</div>
+      <table class="compare-table" id="ptable">
+        <thead>
+          <tr>
+            <th>Stage</th>
+            <th>Input → Output</th>
+            <th>Method</th>
+            <th>Latency</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr id="ptr-0">
+            <td>Candidate Retrieval</td>
+            <td>Follows → 50k candidates</td>
+            <td>Fan-out on Read from social graph</td>
+            <td>~10ms</td>
+          </tr>
+          <tr id="ptr-1">
+            <td>Light Filtering</td>
+            <td>50k → 500 posts</td>
+            <td>Bloom filters, blocklist, spam rules</td>
+            <td>~5ms</td>
+          </tr>
+          <tr id="ptr-2">
+            <td>ML Scoring</td>
+            <td>500 → scored list</td>
+            <td>Neural net inference, feature lookup</td>
+            <td>~80ms</td>
+          </tr>
+          <tr id="ptr-3">
+            <td>Re-rank &amp; Diversity</td>
+            <td>Scored → top 20</td>
+            <td>MMR algorithm, author dedup</td>
+            <td>~5ms</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="verdict success" id="s4-verdict" style="display:none">
+      <div class="verdict-icon">⚡</div>
+      <div>
+        <div class="verdict-title">50,000 posts ranked in ~100ms</div>
+        <div class="verdict-body">The key is that the expensive ML step only runs on 500 pre-filtered candidates, not all 50k. Each stage aggressively reduces the candidate pool — and every stage runs in parallel across a model serving cluster.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 5 — Ranking Signals
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-5">
+    <div class="narrator" id="narrator-5"><div class="narrator-icon">🎙</div><div><span id="narrator-text-5"></span><span class="speaking-dots" id="speaking-dots-5" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Ranking Signals <span class="pill purple">Key Distinction</span></div>
+    <div class="screen-sub">Not all signals are equal. Engagement quality matters more than raw quantity.</div>
+
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">📡 Signal Weights in the Scoring Model</div>
+    <div class="signals-list" id="signals-list">
+      <div class="signal-row">
+        <span class="signal-label">Engagement rate</span>
+        <div class="signal-bar-wrap"><div class="signal-bar" id="bar-0" style="width:0%;background:var(--blue)"></div></div>
+        <span class="signal-pct" id="pct-0">35%</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-label">Author affinity</span>
+        <div class="signal-bar-wrap"><div class="signal-bar" id="bar-1" style="width:0%;background:var(--purple)"></div></div>
+        <span class="signal-pct" id="pct-1">25%</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-label">Recency decay</span>
+        <div class="signal-bar-wrap"><div class="signal-bar" id="bar-2" style="width:0%;background:var(--green)"></div></div>
+        <span class="signal-pct" id="pct-2">20%</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-label">Content relevance</span>
+        <div class="signal-bar-wrap"><div class="signal-bar" id="bar-3" style="width:0%;background:var(--amber)"></div></div>
+        <span class="signal-pct" id="pct-3">15%</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-label">Diversity boost</span>
+        <div class="signal-bar-wrap"><div class="signal-bar" id="bar-4" style="width:0%;background:var(--red)"></div></div>
+        <span class="signal-pct" id="pct-4">5%</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div id="s5-table" style="display:none">
+      <table class="compare-table">
+        <thead>
+          <tr><th>Signal type</th><th>What it captures</th><th>Positive</th><th>Negative</th></tr>
+        </thead>
+        <tbody>
+          <tr id="str-0"><td>Explicit</td><td>Likes, shares, saves, comments</td><td>High intent</td><td>Easy to game</td></tr>
+          <tr id="str-1"><td>Implicit</td><td>Watch time, hover, scroll depth</td><td>Hard to fake</td><td>Needs ML to interpret</td></tr>
+          <tr id="str-2"><td>Historical</td><td>Past interactions with author</td><td>Personalised</td><td>Cold-start problem</td></tr>
+          <tr id="str-3"><td>Contextual</td><td>Time of day, device, location</td><td>Timely</td><td>Privacy concerns</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="verdict success" id="s5-verdict" style="display:none">
+      <div class="verdict-icon">🔑</div>
+      <div>
+        <div class="verdict-title">Implicit signals beat explicit ones at scale</div>
+        <div class="verdict-body">A like is binary. Watch time, scroll depth, and hover duration reveal genuine interest that users never consciously express. TikTok's dominance is built on optimising watch time — an implicit signal — not likes. The best ranking models weight implicit signals heavily.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 6 — Summary
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-6">
+    <div class="narrator" id="narrator-6"><div class="narrator-icon">🎙</div><div><span id="narrator-text-6"></span><span class="speaking-dots" id="speaking-dots-6" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Key Takeaways</div>
+    <div class="screen-sub">What every engineer should know about relevancy and ranking.</div>
+
+    <div class="concepts-grid">
+      <div class="concept-card">
+        <div class="concept-icon">⏱</div>
+        <div class="concept-title">Chrono first</div>
+        <div class="concept-body">Start with chronological. Simple to build, easy to debug, zero ML overhead. Move to ranking only when content volume overwhelms users.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">🧠</div>
+        <div class="concept-title">ML Scoring</div>
+        <div class="concept-body">Each candidate post gets a weighted score: engagement rate, affinity, recency decay, content relevance, diversity. Highest score wins position.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">⚙️</div>
+        <div class="concept-title">4-Stage Pipeline</div>
+        <div class="concept-body">Retrieve → Filter → Score → Re-rank. Aggressive funnel: 50k candidates down to 20 in ~100ms. Filter early to reduce ML inference cost.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">📡</div>
+        <div class="concept-title">Implicit Signals</div>
+        <div class="concept-body">Watch time, scroll depth, hover — these are harder to fake and reveal true engagement. TikTok's moat is built on implicit signal optimisation.</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="verdict success">
+      <div class="verdict-icon">💡</div>
+      <div>
+        <div class="verdict-title">The rule of thumb</div>
+        <div class="verdict-body">Ranking is a quality problem, not a speed problem. A chronological feed loads instantly but buries your best content under noise. ML scoring inverts that — but the scoring pipeline must itself be fast. If your ML inference takes 500ms, your users feel it. The goal: maximum relevance, under 150ms, at every scale.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Footer nav ── -->
+  <div class="footer">
+    <div class="footer-left">
+      <button class="btn ghost" id="btn-prev" onclick="prevScreen()" disabled>← Back</button>
+      <button class="btn blue"  id="btn-next" onclick="nextScreen()">Next →</button>
+    </div>
+    <div class="footer-right">
+      <button class="btn amber" id="btn-auto" onclick="runAuto()">▶ Auto demo</button>
+      <button class="btn ghost" id="btn-pause" onclick="togglePause()" style="display:none">⏸ Pause</button>
+      <button class="btn ghost" id="btn-restart" onclick="restart()">↺ Restart</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════
+// AUDIO ENGINE
+// ═══════════════════════════
+let audioEnabled = true;
+let audioCtx = null;
+
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function toggleAudio() {
+  audioEnabled = !audioEnabled;
+  const ctrl  = document.getElementById('audio-ctrl');
+  const label = document.getElementById('audio-label');
+  ctrl.className  = 'audio-ctrl' + (audioEnabled ? ' on' : '');
+  label.textContent = audioEnabled ? 'Audio on' : 'Audio off';
+  if (!audioEnabled) { window.speechSynthesis.cancel(); }
+  else { try { getCtx().resume(); } catch(e) {} speak("Audio enabled.", 0, null); }
+}
+
+let _cancelToken  = 0;
+let _charOffset   = 0;
+let _pausedText   = '';
+let _pausedIdx    = 0;
+let _pausedOnEnd  = null;
+let _pausedResolve = null;
+
+function _getVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  return voices.find(v => v.lang.startsWith('en') && (
+    v.name.includes('Google') || v.name.includes('Samantha') ||
+    v.name.includes('Daniel') || v.name.includes('Alex')
+  )) || voices.find(v => v.lang.startsWith('en'));
+}
+
+function _showNarrator(screenIdx, text) {
+  const suffix  = screenIdx > 0 ? '-'+screenIdx : '';
+  const ntxt    = document.getElementById('narrator-text'  + suffix);
+  const ndots   = document.getElementById('speaking-dots'  + suffix);
+  const nbubble = document.getElementById('narrator'       + suffix);
+  if (ntxt)    ntxt.textContent = text;
+  if (ndots)   ndots.style.display = 'inline';
+  if (nbubble) nbubble.classList.add('visible');
+}
+
+function _hideNarrator(screenIdx) {
+  const suffix  = screenIdx > 0 ? '-'+screenIdx : '';
+  const ndots   = document.getElementById('speaking-dots' + suffix);
+  const nbubble = document.getElementById('narrator'      + suffix);
+  if (ndots)   ndots.style.display = 'none';
+  if (nbubble) nbubble.classList.remove('visible');
+}
+
+function _doSpeak(text, startChar, screenIdx, onEnd, token) {
+  window.speechSynthesis.cancel();
+  const remaining = text.slice(startChar);
+  if (!remaining.trim()) { if (onEnd) onEnd(); return; }
+  _showNarrator(screenIdx, text);
+  const utter = new SpeechSynthesisUtterance(remaining);
+  utter.rate  = 0.95;
+  utter.pitch = 1.0;
+  const v = _getVoice();
+  if (v) utter.voice = v;
+  utter.onboundary = (e) => {
+    if (_cancelToken !== token) return;
+    if (e.name === 'word') _charOffset = startChar + (e.charIndex || 0);
+  };
+  utter.onend = () => {
+    if (_cancelToken !== token) return;
+    _hideNarrator(screenIdx);
+    _pausedText = ''; _charOffset = 0; _pausedOnEnd = null;
+    if (onEnd) onEnd();
+  };
+  utter.onerror = (e) => {
+    if (_cancelToken !== token) return;
+    if (e.error === 'interrupted' || e.error === 'canceled') return;
+    _hideNarrator(screenIdx);
+    if (onEnd) onEnd();
+  };
+  window.speechSynthesis.speak(utter);
+}
+
+function speak(text, screenIdx, onEnd) {
+  if (!audioEnabled) { if (onEnd) onEnd(); return; }
+  _cancelToken++;
+  const myToken = _cancelToken;
+  _charOffset = 0; _pausedText = text; _pausedIdx = screenIdx; _pausedOnEnd = onEnd;
+  _doSpeak(text, 0, screenIdx, onEnd, myToken);
+}
+
+function speakWait(text, screenIdx) {
+  return new Promise(resolve => speak(text, screenIdx, resolve));
+}
+
+function tone(freq, type, dur, vol=0.12) {
+  if (!audioEnabled) return;
+  try {
+    const ctx = getCtx(), osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.connect(g); g.connect(ctx.destination);
+    osc.type = type; osc.frequency.value = freq;
+    g.gain.setValueAtTime(vol, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.start(); osc.stop(ctx.currentTime + dur);
+  } catch(e) {}
+}
+const sfx = {
+  click:   () => tone(700, 'sine', 0.07, 0.08),
+  data:    () => tone(1100, 'square', 0.04, 0.05),
+  success: () => [523,659,784,1047].forEach((f,i) => setTimeout(() => tone(f,'sine',.18,.11), i*80)),
+  warn:    () => [440,370,311].forEach((f,i) => setTimeout(() => tone(f,'sawtooth',.15,.10), i*100)),
+  error:   () => [190,160].forEach((f,i) => setTimeout(() => tone(f,'sawtooth',.25,.14), i*120)),
+  pop:     () => tone(900, 'sine', 0.06, 0.09),
+  chord:   () => [261,329,392,523].forEach((f,i) => setTimeout(() => tone(f,'sine',.28,.09), i*55)),
+};
+
+// ═══════════════════════════
+// SCREEN ENGINE
+// ═══════════════════════════
+let currentScreen = 0;
+const TOTAL = 7;
+let busy = false;
+let paused = false;
+
+function delay(ms) {
+  return new Promise(resolve => {
+    const start = Date.now();
+    function tick() {
+      if (paused) { setTimeout(tick, 100); return; }
+      const elapsed = Date.now() - start;
+      if (elapsed >= ms) resolve();
+      else setTimeout(tick, Math.min(100, ms - elapsed));
+    }
+    tick();
+  });
+}
+
+function updateHeader(idx) {
+  const h1  = document.getElementById('header-title');
+  const sub = document.getElementById('header-sub');
+  const mod = document.getElementById('module-num');
+  if (!h1 || !sub || !mod) return;
+  if (h1.dataset.screen === String(idx)) return;
+  h1.dataset.screen = String(idx);
+
+  const isIntro = idx === 0;
+  const title    = isIntro
+    ? 'Architecture Thinking <span style="color:var(--blue)">for AI-Assisted Development</span>'
+    : 'Relevancy &amp; Ranking';
+  const subtitle = isIntro
+    ? 'Learn how real systems evolve — and how to work smarter with AI.'
+    : 'From chronological feeds to ML-driven scoring — and why order matters.';
+
+  h1.classList.add('fading');
+  sub.classList.add('fading');
+  mod.classList.add('fading');
+  setTimeout(() => {
+    h1.innerHTML    = title;
+    sub.textContent = subtitle;
+    mod.textContent = 'Chapter 04';
+    h1.classList.remove('fading');
+    sub.classList.remove('fading');
+    mod.classList.remove('fading');
+  }, 550);
+}
+
+function showScreen(idx) {
+  document.querySelectorAll('.screen').forEach((s, i) => s.classList.toggle('active', i === idx));
+  for (let i = 0; i < TOTAL; i++) {
+    const p = document.getElementById('prog-'+i);
+    if (!p) continue;
+    p.className = 'prog-step' + (i < idx ? ' done' : i === idx ? ' active' : '');
+  }
+  if (idx > 2) {
+    const p2 = document.getElementById('prog-2');
+    if (p2) p2.className = 'prog-step warn done';
+  }
+  currentScreen = idx;
+  updateHeader(idx);
+  document.getElementById('btn-prev').disabled = idx === 0;
+  const btnNext = document.getElementById('btn-next');
+  btnNext.disabled = idx === TOTAL - 1;
+  btnNext.style.display = idx === TOTAL - 1 ? 'none' : 'flex';
+}
+
+// ── Pause / Resume ──
+function showPauseBtn(show) {
+  const btn = document.getElementById('btn-pause');
+  if (!btn) return;
+  btn.style.display = show ? 'flex' : 'none';
+  if (!show) {
+    paused = false;
+    btn.textContent = '⏸ Pause';
+    btn.classList.remove('blue');
+    btn.classList.add('ghost');
+  }
+}
+
+function togglePause() {
+  const btn = document.getElementById('btn-pause');
+  paused = !paused;
+  if (paused) {
+    window.speechSynthesis.cancel();
+    btn.textContent = '▶ Resume';
+    btn.classList.add('blue');
+    btn.classList.remove('ghost');
+  } else {
+    btn.textContent = '⏸ Pause';
+    btn.classList.remove('blue');
+    btn.classList.add('ghost');
+    if (_pausedText) {
+      _doSpeak(_pausedText, _charOffset, _pausedIdx, _pausedOnEnd, _cancelToken);
+    }
+    if (_pausedResolve) { _pausedResolve(); _pausedResolve = null; }
+  }
+}
+
+// ═══════════════════════════
+// SCREEN ANIMATIONS
+// ═══════════════════════════
+
+async function animateScreen0() {
+  document.querySelectorAll('.intro-card').forEach(c => c.classList.remove('animating'));
+  const inspEl = document.querySelector('.intro-inspiration');
+  if (inspEl) inspEl.classList.remove('animating');
+
+  await speakWait("Welcome to Engineering Refresh. This chapter explores Relevancy and Ranking — the invisible force that decides what you see first in any modern social feed.", 0);
+  await delay(600);
+
+  const cards = document.querySelectorAll('.intro-card');
+  for (let i = 0; i < cards.length; i++) {
+    sfx.data();
+    cards[i].classList.add('animating');
+    await delay(1400);
+  }
+
+  await delay(400);
+  if (inspEl) inspEl.classList.add('animating');
+  sfx.pop();
+  await delay(800);
+
+  await speakWait("Facebook, Instagram, TikTok — they all moved from chronological feeds to ranked feeds. We will trace that evolution and build the scoring system that powers it.", 0);
+  await delay(400);
+}
+
+async function animateScreen1Intro() {
+  await speakWait("Let's start with Relevancy and Ranking.", 1);
+  await delay(800);
+  await speakWait("The central concept is the ranking pipeline — a multi-stage system that scores thousands of candidate posts and surfaces the most relevant ones in milliseconds.", 1);
+  await delay(800);
+  await speakWait("We begin with the simplest possible approach — chronological order — and see why it breaks down at scale.", 1);
+  await delay(1000);
+}
+
+async function animateScreen1() {
+  await speakWait("At small scale, chronological order is perfect. Latest post wins. It is simple, transparent, and users understand it immediately.", 1);
+  await delay(800);
+
+  document.getElementById('s1-stats').style.display = 'grid';
+  sfx.data();
+  const latEl = document.getElementById('s1-latency');
+  latEl.className = 'stat-card good';
+  document.getElementById('s1-latency-val').textContent  = '4 ms';
+  document.getElementById('s1-latency-note').textContent = '✓ Simple ORDER BY timestamp DESC';
+  await delay(1200);
+
+  sfx.data();
+  const engEl = document.getElementById('s1-eng');
+  engEl.className = 'stat-card good';
+  document.getElementById('s1-eng-val').textContent  = '8.4%';
+  document.getElementById('s1-eng-note').textContent = '✓ Acceptable at low post volume';
+  await delay(1000);
+
+  sfx.success();
+}
+
+async function animateScreen1Full() {
+  await animateScreen1Intro();
+  await animateScreen1();
+}
+
+async function animateScreen2() {
+  await speakWait("Now scale to 100 million daily active users. A single user follows 500 people. 2,000 posts land every second. Chronological order collapses under the volume.", 2);
+  sfx.warn();
+  await delay(1000);
+
+  const posts = ['op-1','op-2','op-3'];
+  for (const id of posts) {
+    sfx.error();
+    const el = document.getElementById(id);
+    el.classList.add('ranked');
+    await delay(700);
+    el.classList.remove('ranked');
+  }
+
+  document.getElementById('op-3').classList.add('demoted');
+
+  await speakWait("The spam post is ranked first because it was published 0.2 seconds ago. A genuinely viral engineering post with 847 likes is buried at position 47. The user scrolls 40 posts before finding anything relevant — and then gives up.", 2);
+  sfx.error();
+  await delay(600);
+}
+
+async function animateScreen3() {
+  await speakWait("The solution is a machine learning scoring model. Every candidate post receives a score based on five weighted signals. The highest scores surface first — regardless of publish time.", 3);
+  await delay(900);
+
+  await speakWait("Engagement rate carries the most weight — 35%. Author affinity, how often you interact with that person, is 25%. Recency still matters at 20% but decays exponentially. Content relevance and diversity round out the formula.", 3);
+  await delay(900);
+
+  // Reveal ranked feed
+  document.getElementById('ranked-feed').style.display = 'flex';
+  document.getElementById('ranked-feed').style.flexDirection = 'column';
+  document.getElementById('ranked-feed').style.animation = 'fadeIn .65s ease';
+
+  const posts = [
+    { id: 'rp-1', rank: 'rr-1', cls: 'top' },
+    { id: 'rp-2', rank: 'rr-2', cls: 'ranked' },
+    { id: 'rp-3', rank: 'rr-3', cls: 'demoted' },
+  ];
+
+  for (const p of posts) {
+    sfx.data();
+    const el = document.getElementById(p.id);
+    el.className = 'feed-post ' + p.cls;
+    await delay(900);
+  }
+
+  sfx.chord();
+  await delay(600);
+
+  document.getElementById('s3-stats').style.display = 'grid';
+  sfx.data();
+  const engEl = document.getElementById('s3-eng');
+  engEl.className = 'stat-card good';
+  document.getElementById('s3-eng-val').textContent  = '+163%';
+  document.getElementById('s3-eng-note').textContent = '✓ Best content surfaces immediately';
+  await delay(1100);
+
+  sfx.data();
+  const scoreEl = document.getElementById('s3-score');
+  scoreEl.className = 'stat-card good';
+  document.getElementById('s3-score-val').textContent  = '~100 ms';
+  document.getElementById('s3-score-note').textContent = '✓ Score 500 posts in one pipeline pass';
+  await delay(900);
+
+  sfx.success();
+  await speakWait("Engagement uplift of 163%. The spam post collapses to the bottom. The viral engineering post is now first — scored at 0.94 out of 1. That is the power of ML ranking.", 3);
+}
+
+async function animateScreen4() {
+  await speakWait("Scoring 50,000 candidate posts per feed request in under 150 milliseconds requires a four-stage pipeline. Let's walk through each stage.", 4);
+  await delay(800);
+
+  const stages = [
+    { node: 0, arr: 0, text: "Stage one: Candidate Retrieval. Pull up to 50,000 recent posts from everyone the user follows. This comes from the social graph service." },
+    { node: 1, arr: 1, text: "Stage two: Light Filtering. Apply fast, rule-based checks — bloom filters, block lists, spam classifiers. Reduce 50,000 posts down to just 500 quality candidates." },
+    { node: 2, arr: 2, text: "Stage three: ML Scoring. Run each of the 500 candidates through the neural network. Feature lookups from Redis, inference on GPU model servers. This is the expensive step." },
+    { node: 3, arr: 3, text: "Stage four: Re-rank and Diversity. Apply the MMR algorithm to ensure variety — no more than two consecutive posts from the same author. Serve the top 20." },
+  ];
+
+  for (const s of stages) {
+    const node = document.getElementById('pipe-'+s.node);
+    const arr  = document.getElementById('arr-'+s.arr);
+    node.className = 'pipe-node active';
+    if (arr) arr.className = 'pipe-arrow active';
+    sfx.data();
+    await speakWait(s.text, 4);
+    node.className = 'pipe-node done';
+    await delay(400);
+  }
+  document.getElementById('pipe-4').className = 'pipe-node done';
+  sfx.chord();
+  await delay(700);
+
+  document.getElementById('s4-table').style.display = 'block';
+  document.getElementById('s4-table').style.animation = 'fadeIn .9s ease';
+
+  const rows = ['ptr-0','ptr-1','ptr-2','ptr-3'];
+  for (const id of rows) {
+    sfx.data();
+    document.getElementById(id).className = 'hl-row';
+    await delay(800);
+    document.getElementById(id).className = '';
+  }
+  await delay(400);
+
+  document.getElementById('s4-verdict').style.display = 'flex';
+  document.getElementById('s4-verdict').style.animation = 'fadeIn .9s ease';
+  sfx.success();
+  await delay(600);
+}
+
+async function animateScreen5() {
+  await speakWait("Not all ranking signals are equal. Let's look at the five signal types and why implicit signals — the ones users don't consciously provide — are the most valuable.", 5);
+  await delay(800);
+
+  const bars = [
+    { idx: 0, pct: 35 },
+    { idx: 1, pct: 25 },
+    { idx: 2, pct: 20 },
+    { idx: 3, pct: 15 },
+    { idx: 4, pct: 5  },
+  ];
+
+  for (const b of bars) {
+    sfx.data();
+    document.getElementById('bar-'+b.idx).style.width = b.pct + '%';
+    await delay(800);
+  }
+
+  await delay(600);
+  document.getElementById('s5-table').style.display = 'block';
+  document.getElementById('s5-table').style.animation = 'fadeIn .9s ease';
+
+  const rows = ['str-0','str-1','str-2','str-3'];
+  for (const id of rows) {
+    sfx.data();
+    document.getElementById(id).className = 'hl-row';
+    await delay(800);
+    document.getElementById(id).className = '';
+  }
+  await delay(400);
+
+  document.getElementById('s5-verdict').style.display = 'flex';
+  document.getElementById('s5-verdict').style.animation = 'fadeIn .9s ease';
+  sfx.chord();
+  await delay(600);
+
+  await speakWait("TikTok's dominance is built on optimising watch time — an implicit signal. A like takes half a second and reveals almost nothing. Watching 90% of a video reveals genuine interest that no explicit signal can match.", 5);
+}
+
+async function animateScreen6() {
+  await speakWait("The key lesson: chronological feeds are right for small scale. Move to ML ranking when content volume overwhelms users. Build the scoring pipeline in stages — filter aggressively before the expensive ML step. And always weight implicit signals over explicit ones.", 6);
+  sfx.success();
+}
+
+const screenAnimations = [
+  animateScreen0,
+  animateScreen1Full,
+  animateScreen2,
+  animateScreen3,
+  animateScreen4,
+  animateScreen5,
+  animateScreen6,
+];
+
+// ═══════════════════════════
+// NAVIGATION
+// ═══════════════════════════
+async function beginModule() {
+  if (busy) return;
+  busy = true;
+  paused = false;
+  sfx.click();
+  showPauseBtn(true);
+
+  const introScreen = document.getElementById('screen-0');
+  const nextScreenEl = document.getElementById('screen-1');
+  const overlay = document.getElementById('cinematic-overlay');
+
+  introScreen.classList.add('sliding-out');
+  await delay(680);
+
+  introScreen.classList.remove('sliding-out');
+  introScreen.classList.remove('active');
+  overlay.classList.add('fade-in');
+  await delay(700);
+
+  nextScreenEl.classList.add('active');
+  currentScreen = 1;
+  updateHeader(1);
+  document.getElementById('btn-prev').disabled = false;
+  document.getElementById('prog-0').className = 'prog-step done';
+  document.getElementById('prog-1').className = 'prog-step active';
+
+  overlay.classList.remove('fade-in');
+  overlay.classList.add('fade-out');
+  nextScreenEl.classList.add('slide-in');
+  await delay(800);
+  nextScreenEl.classList.remove('slide-in');
+  overlay.classList.remove('fade-out');
+
+  window.speechSynthesis.cancel();
+  await animateScreen1Intro();
+  await animateScreen1();
+  showPauseBtn(false);
+  busy = false;
+}
+
+async function goToScreen(idx, animate=true) {
+  if (busy) return;
+  busy = true;
+  _cancelToken++;
+  window.speechSynthesis.cancel();
+  _pausedText = '';
+  paused = false;
+  showScreen(idx);
+  showPauseBtn(true);
+  if (animate) await screenAnimations[idx]();
+  showPauseBtn(false);
+  busy = false;
+}
+
+async function nextScreen() {
+  if (currentScreen < TOTAL - 1) {
+    _cancelToken++;
+    window.speechSynthesis.cancel();
+    _pausedText = '';
+    busy = false;
+    paused = false;
+    showPauseBtn(false);
+    sfx.click();
+    await goToScreen(currentScreen + 1);
+  }
+}
+
+async function prevScreen() {
+  if (currentScreen > 0) {
+    _cancelToken++;
+    window.speechSynthesis.cancel();
+    _pausedText = '';
+    busy = false;
+    paused = false;
+    showPauseBtn(false);
+    sfx.click();
+    resetStats();
+    await goToScreen(currentScreen - 1, true);
+  }
+}
+
+function resetStats() {
+  // Screen 1
+  document.getElementById('s1-stats').style.display = 'none';
+  ['s1-latency','s1-eng'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'stat-card';
+    const v = document.getElementById(id+'-val');
+    const n = document.getElementById(id+'-note');
+    if (v) v.textContent = '—';
+    if (n) n.textContent = '';
+  });
+
+  // Screen 2 — restore overload posts
+  ['op-1','op-2','op-3'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'feed-post';
+  });
+
+  // Screen 3
+  document.getElementById('ranked-feed').style.display = 'none';
+  ['rp-1','rp-2','rp-3'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'feed-post';
+  });
+  document.getElementById('s3-stats').style.display = 'none';
+  ['s3-eng','s3-score'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'stat-card';
+    const v = document.getElementById(id+'-val');
+    const n = document.getElementById(id+'-note');
+    if (v) v.textContent = '—';
+    if (n) n.textContent = '';
+  });
+
+  // Screen 4
+  for (let i = 0; i <= 4; i++) {
+    const p = document.getElementById('pipe-'+i);
+    if (p) p.className = 'pipe-node';
+  }
+  for (let i = 0; i <= 3; i++) {
+    const a = document.getElementById('arr-'+i);
+    if (a) a.className = 'pipe-arrow';
+  }
+  const s4t = document.getElementById('s4-table');
+  if (s4t) s4t.style.display = 'none';
+  ['ptr-0','ptr-1','ptr-2','ptr-3'].forEach(id => {
+    const r = document.getElementById(id);
+    if (r) r.className = '';
+  });
+  const s4v = document.getElementById('s4-verdict');
+  if (s4v) s4v.style.display = 'none';
+
+  // Screen 5
+  for (let i = 0; i <= 4; i++) {
+    const b = document.getElementById('bar-'+i);
+    if (b) b.style.width = '0%';
+  }
+  const s5t = document.getElementById('s5-table');
+  if (s5t) s5t.style.display = 'none';
+  ['str-0','str-1','str-2','str-3'].forEach(id => {
+    const r = document.getElementById(id);
+    if (r) r.className = '';
+  });
+  const s5v = document.getElementById('s5-verdict');
+  if (s5v) s5v.style.display = 'none';
+}
+
+function restart() {
+  _cancelToken++;
+  window.speechSynthesis.cancel();
+  _pausedText = '';
+  busy = false;
+  paused = false;
+  showPauseBtn(false);
+  sfx.click();
+  resetStats();
+
+  document.querySelectorAll('.intro-card').forEach(c => c.classList.remove('animating'));
+  const insp = document.querySelector('.intro-inspiration');
+  if (insp) insp.classList.remove('animating');
+
+  showScreen(0);
+  updateHeader(0);
+  document.getElementById('btn-prev').disabled = true;
+  document.getElementById('btn-next').style.display = 'flex';
+}
+
+async function runAuto() {
+  if (busy) return;
+  sfx.click();
+  resetStats();
+  await goToScreen(0);
+  await delay(1800);
+  await beginModule();
+  await delay(1800);
+  for (let i = 2; i < TOTAL; i++) {
+    await goToScreen(i);
+    await delay(1800);
+  }
+}
+
+// Init voices
+if (window.speechSynthesis) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+}
+
+showScreen(0);
+</script>
+</body>
+</html>
