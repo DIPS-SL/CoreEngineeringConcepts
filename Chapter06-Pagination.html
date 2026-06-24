@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 06 — Infinite Scroll & Cursor Pagination | Engineering Refresh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #f0f2f5;
+    --surface:   #ffffff;
+    --surface2:  #f5f7fa;
+    --border:    #dde1ea;
+    --border2:   #c4cad8;
+    --text:      #1a1f2e;
+    --muted:     #5a6478;
+    --faint:     #9aa3b5;
+    --blue:      #1a7fe8;
+    --blue-bg:   #e8f2fd;
+    --green:     #18a864;
+    --green-bg:  #e6f7f0;
+    --red:       #e03e3e;
+    --red-bg:    #fdeaea;
+    --amber:     #d97b10;
+    --amber-bg:  #fef3e2;
+    --purple:    #7c3aed;
+    --purple-bg: #f3f0ff;
+    --font-ui:   'DM Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: none;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 700px;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  .header {
+    padding: 18px 24px 16px;
+    display: flex; align-items: flex-start;
+    justify-content: space-between; gap: 12px;
+  }
+  .header-left { flex: 1; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--blue); background: var(--blue-bg);
+    border: 1px solid rgba(26,127,232,.25); border-radius: 6px;
+    padding: 3px 9px; margin-bottom: 8px;
+  }
+  .header h1 { font-size: 19px; font-weight: 600; margin-bottom: 3px; }
+  .header p  { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+  .module-num {
+    font-family: var(--font-mono); font-size: 11px; color: var(--faint);
+    background: var(--surface2); border: none;
+    border-radius: 8px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  /* ── Audio toggle ── */
+  .audio-ctrl {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface2); border: none;
+    border-radius: 8px; padding: 5px 10px; cursor: pointer;
+    font-size: 11px; color: var(--muted); transition: all .35s ease;
+    user-select: none;
+  }
+  .audio-ctrl:hover { background: #edf0f5; }
+  .audio-ctrl.on { background: var(--blue-bg); color: var(--blue); }
+  .audio-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); transition: background .2s; }
+  .audio-ctrl.on .audio-dot { background: var(--blue); animation: pulse 2.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.3);opacity:.6} }
+
+  /* ── Progress bar ── */
+  .progress-bar { display: flex; }
+  .prog-step {
+    flex: 1; padding: 8px 0; text-align: center;
+    font-family: var(--font-mono); font-size: 9px;
+    color: var(--faint); background: var(--surface2);
+    transition: all .7s cubic-bezier(0.4,0,0.2,1); cursor: default;
+  }
+  .prog-step.active { background: var(--blue-bg);  color: var(--blue);  font-weight: 500; }
+  .prog-step.done   { background: var(--green-bg); color: var(--green); }
+  .prog-step.warn   { background: var(--red-bg);   color: var(--red); }
+
+  /* ── Screens ── */
+  .screen { display: none; padding: 20px 24px; animation: fadeIn .9s cubic-bezier(0.22,0.61,0.36,1); }
+  .screen.active { display: block; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+
+  /* ── Cinematic overlay ── */
+  #cinematic-overlay { position:fixed;inset:0;z-index:9999;background:var(--surface);opacity:0;pointer-events:none;transition:opacity .7s cubic-bezier(0.4,0,0.2,1); }
+  #cinematic-overlay.fade-in  { opacity:1;pointer-events:all; }
+  #cinematic-overlay.fade-out { opacity:0;pointer-events:none; }
+  @keyframes slideOut { from{opacity:1;transform:translateX(0)} to{opacity:0;transform:translateX(-28px)} }
+  .screen.sliding-out { display:block!important;animation:slideOut .7s cubic-bezier(0.4,0,1,1) forwards;pointer-events:none; }
+  @keyframes slideIn  { from{opacity:0;transform:translateX(28px)} to{opacity:1;transform:translateX(0)} }
+  .screen.slide-in { animation:slideIn .8s cubic-bezier(0.22,0.61,0.36,1) forwards!important; }
+
+  /* ── Narrator bubble ── */
+  .narrator, .narrator-dark {
+    padding: 10px 14px; margin-bottom: 16px;
+    background: var(--blue-bg); border: none;
+    border-radius: 10px; font-size: 12px; color: var(--blue); line-height: 1.6;
+    display: none; align-items: flex-start; gap: 8px;
+  }
+  .narrator.visible, .narrator-dark.visible { display: flex; }
+  .narrator-icon { font-size: 15px; flex-shrink: 0; }
+  .speaking-dots span {
+    display: inline-block; width: 4px; height: 4px; border-radius: 50%;
+    background: var(--blue); margin: 0 1px; vertical-align: middle;
+    animation: bounce 1.8s ease-in-out infinite;
+  }
+  .speaking-dots span:nth-child(2) { animation-delay:.2s; }
+  .speaking-dots span:nth-child(3) { animation-delay:.4s; }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+
+  /* ── Screen titles ── */
+  .screen-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+  .screen-sub   { font-size: 12px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+
+  /* ── SQL query box ── */
+  .query-box {
+    background: #1a1f2e; border-radius: 10px; padding: 12px 16px;
+    font-family: var(--font-mono); font-size: 11px; line-height: 1.9;
+    color: #c9d1d9; overflow-x: auto; margin-bottom: 14px;
+    white-space: pre;
+  }
+  .sql-kw  { color: #ff7b72; }
+  .sql-fn  { color: #79c0ff; }
+  .sql-cmt { color: #6e7681; }
+  .sql-num { color: #f2cc60; }
+  .sql-str { color: #a5d6ff; }
+
+  /* ── Stat cards ── */
+  .stats-row   { display: grid; grid-template-columns: 1fr 1fr;     gap: 10px; margin-bottom: 12px; }
+  .stats-row-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .stat-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px;
+    transition: border-color .7s ease, background .7s ease;
+  }
+  .stat-card.good { border-color: var(--green); background: var(--green-bg); }
+  .stat-card.bad  { border-color: var(--red);   background: var(--red-bg); }
+  .stat-card.warn { border-color: var(--amber);  background: var(--amber-bg); }
+  .stat-card.blue { border-color: var(--blue);   background: var(--blue-bg); }
+  .stat-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+  .stat-card.good .stat-label { color: var(--green); }
+  .stat-card.bad  .stat-label { color: var(--red); }
+  .stat-card.warn .stat-label { color: var(--amber); }
+  .stat-card.blue .stat-label { color: var(--blue); }
+  .stat-val  { font-size: 22px; font-weight: 600; font-family: var(--font-mono); color: var(--text); }
+  .stat-card.good .stat-val { color: var(--green); }
+  .stat-card.bad  .stat-val { color: var(--red); }
+  .stat-card.warn .stat-val { color: var(--amber); }
+  .stat-card.blue .stat-val { color: var(--blue); }
+  .stat-note { font-size: 10px; color: var(--faint); margin-top: 4px; line-height: 1.4; }
+  .stat-card.good .stat-note { color: var(--green); opacity:.8; }
+  .stat-card.bad  .stat-note { color: var(--red);   opacity:.8; }
+  .stat-card.warn .stat-note { color: var(--amber);  opacity:.8; }
+  .stat-card.blue .stat-note { color: var(--blue);  opacity:.8; }
+
+  /* ── Verdict banner ── */
+  .verdict {
+    border-radius: 10px; padding: 14px 16px;
+    display: flex; align-items: flex-start; gap: 12px;
+    font-size: 13px; line-height: 1.5; margin-top: 12px;
+  }
+  .verdict.success { background: var(--green-bg); color: var(--green); }
+  .verdict.info    { background: var(--blue-bg);  color: var(--blue); }
+  .verdict.warn    { background: var(--amber-bg); color: var(--amber); }
+  .verdict-icon  { font-size: 20px; flex-shrink: 0; }
+  .verdict-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .verdict-body  { font-size: 12px; opacity: .85; line-height: 1.55; }
+
+  /* ── Pill tag ── */
+  .pill {
+    display: inline-flex; align-items: center;
+    font-family: var(--font-mono); font-size: 9px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px; vertical-align: middle; margin-left: 6px;
+  }
+  .pill.green  { background: var(--green-bg);  color: var(--green); }
+  .pill.red    { background: var(--red-bg);    color: var(--red); }
+  .pill.blue   { background: var(--blue-bg);   color: var(--blue); }
+  .pill.amber  { background: var(--amber-bg);  color: var(--amber); }
+  .pill.purple { background: var(--purple-bg); color: var(--purple); }
+
+  /* ── Section label ── */
+  .section-label {
+    font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px;
+  }
+
+  /* ── Divider ── */
+  .divider { height: 1px; background: var(--border); margin: 14px 0; opacity: .5; }
+
+  /* ── DB Table ── */
+  .db-table {
+    flex: 1; min-width: 140px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden;
+    transition: border-color .7s ease, box-shadow .7s ease, transform .7s ease;
+  }
+  .db-table.highlight { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(26,127,232,.1); transform: translateY(-2px); }
+  .db-table.success   { border-color: var(--green); box-shadow: 0 0 0 3px rgba(24,168,100,.1); transform: translateY(-2px); }
+  .db-table.warn      { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(217,123,16,.1); }
+  .table-header {
+    padding: 7px 12px; font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+    background: var(--border); color: var(--text);
+    display: flex; align-items: center; gap: 6px;
+    transition: background .7s ease, color .7s ease;
+  }
+  .db-table.highlight .table-header { background: var(--blue-bg);  color: var(--blue); }
+  .db-table.success   .table-header { background: var(--green-bg); color: var(--green); }
+  .db-table.warn      .table-header { background: var(--amber-bg); color: var(--amber); }
+  .table-field {
+    padding: 4px 12px; font-family: var(--font-mono); font-size: 10px;
+    color: var(--muted); border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .field-pk   { color: var(--amber);  font-size: 9px; font-weight: 500; }
+  .field-fk   { color: var(--blue);   font-size: 9px; font-weight: 500; }
+  .field-type { color: var(--faint);  font-size: 9px; }
+  .field-idx  { color: var(--green);  font-size: 9px; font-weight: 500; }
+  .tables-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+
+  /* ── Concepts grid ── */
+  .concepts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .concept-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 13px 14px;
+  }
+  .concept-icon  { font-size: 18px; margin-bottom: 7px; }
+  .concept-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+  }
+  .concept-body { font-size: 11px; color: var(--faint); line-height: 1.6; }
+
+  /* ── Intro screen ── */
+  .intro-screen { padding: 4px 0 8px; }
+  .intro-series-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: 9px; font-weight: 500;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--blue); background: var(--blue-bg);
+    border: none; border-radius: 20px;
+    padding: 3px 10px; margin-bottom: 12px;
+  }
+  .intro-series-tag .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--blue); animation: pulse 1.6s ease-in-out infinite; }
+  .intro-headline { font-size: 20px; font-weight: 700; line-height: 1.25; color: var(--text); margin-bottom: 4px; letter-spacing: -.01em; }
+  .intro-headline span { color: var(--blue); }
+  .intro-subline  { font-size: 12.5px; color: var(--muted); margin-bottom: 14px; line-height: 1.55; }
+  .intro-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .intro-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 11px 13px 10px;
+    position: relative; overflow: hidden;
+  }
+  .intro-card::after {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    border-radius: 10px 10px 0 0;
+  }
+  .intro-card:nth-child(1)::after { background: linear-gradient(90deg,var(--blue),transparent); }
+  .intro-card:nth-child(2)::after { background: linear-gradient(90deg,var(--green),transparent); }
+  .intro-card:nth-child(3)::after { background: linear-gradient(90deg,var(--red),transparent); }
+  .intro-card:nth-child(4)::after { background: linear-gradient(90deg,var(--purple),transparent); }
+  .intro-card-icon  { font-size: 18px; margin-bottom: 5px; display: block; }
+  .intro-card-title { font-size: 11.5px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+  .intro-card-text  { font-size: 10px; color: var(--muted); line-height: 1.55; }
+
+  .intro-inspiration {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--blue-bg); border-left: 3px solid var(--blue);
+    border-radius: 10px; padding: 11px 13px; margin-bottom: 14px;
+  }
+  .intro-insp-icon  { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+  .intro-insp-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--blue); margin-bottom: 4px;
+  }
+  .intro-insp-text { font-size: 11px; color: var(--muted); line-height: 1.55; }
+  .intro-footer-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .intro-footer-left { display: flex; flex-direction: column; gap: 2px; }
+  .intro-series-name { font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: .08em; color: var(--text); text-transform: uppercase; }
+  .intro-series-meta { font-family: var(--font-mono); font-size: 9px; color: var(--faint); letter-spacing: .05em; }
+  .intro-start-btn {
+    font-family: var(--font-ui); font-size: 12px; font-weight: 600;
+    padding: 8px 20px; border-radius: 8px; cursor: pointer; border: none;
+    background: var(--blue); color: #fff;
+    display: flex; align-items: center; gap: 6px; transition: opacity .15s;
+  }
+  .intro-start-btn:hover { opacity: .88; }
+  @keyframes cardEntry { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:translateY(0)} }
+  .intro-card.animating { opacity:0; animation:cardEntry 1.6s cubic-bezier(0.22,0.61,0.36,1) forwards; }
+  .intro-card.animating:nth-child(1) { animation-delay:.15s; }
+  .intro-card.animating:nth-child(2) { animation-delay:.45s; }
+  .intro-card.animating:nth-child(3) { animation-delay:.75s; }
+  .intro-card.animating:nth-child(4) { animation-delay:1.05s; }
+  @keyframes inspEntry { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+  .intro-inspiration.animating { opacity:0; animation:inspEntry 1s cubic-bezier(0.22,0.61,0.36,1) 1.35s forwards; }
+
+  /* ── Comparison table ── */
+  .compare-table { width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:10.5px;margin-bottom:12px; }
+  .compare-table th { padding:7px 12px;text-align:left;background:var(--surface2);color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.06em;font-size:9px; }
+  .compare-table td { padding:8px 12px;color:var(--text);vertical-align:top;line-height:1.5;transition:background .5s ease,color .5s ease;border-top:1px solid var(--border); }
+  .compare-table td:first-child { font-weight:500;color:var(--muted);font-size:9.5px;white-space:nowrap; }
+  .compare-table tr.good-row td { background:var(--green-bg);color:var(--green); }
+  .compare-table tr.bad-row td  { background:var(--red-bg);color:var(--red); }
+  .compare-table tr.blue-row td { background:var(--blue-bg);color:var(--blue); }
+
+  /* ── Feed mock ── */
+  .feed-mock {
+    background: var(--surface2); border-radius: 10px; overflow: hidden;
+    margin-bottom: 12px; border: 1px solid var(--border);
+  }
+  .feed-mock-header {
+    padding: 8px 14px; font-family: var(--font-mono); font-size: 10px;
+    background: #1a1f2e; color: #79c0ff;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .feed-post {
+    padding: 9px 14px; border-top: 1px solid var(--border);
+    display: flex; align-items: flex-start; gap: 10px;
+    transition: background .4s ease;
+  }
+  .feed-post:first-of-type { border-top: none; }
+  .feed-avatar {
+    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; background: var(--border);
+  }
+  .feed-post-body { flex: 1; }
+  .feed-post-meta { font-family: var(--font-mono); font-size: 9px; color: var(--faint); margin-bottom: 2px; }
+  .feed-post-text { font-size: 11px; color: var(--text); line-height: 1.4; }
+  .feed-post.highlight { background: var(--blue-bg); }
+  .feed-post.new-post  { background: var(--red-bg); border: none; }
+  .feed-post.dupe      { background: var(--amber-bg); }
+
+  /* ── Cursor token ── */
+  .cursor-token {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    background: var(--amber-bg); color: var(--amber);
+    border: 1px solid rgba(217,123,16,.3);
+    border-radius: 6px; padding: 3px 9px;
+  }
+
+  /* ── Page buttons ── */
+  .page-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .page-tab {
+    font-family: var(--font-mono); font-size: 10px;
+    padding: 5px 10px; border-radius: 6px;
+    background: var(--surface2); color: var(--muted);
+    border: 1px solid var(--border); cursor: pointer; transition: all .25s ease;
+  }
+  .page-tab.active { background: var(--blue-bg); color: var(--blue); border-color: rgba(26,127,232,.4); font-weight: 500; }
+  .page-tab.bad    { background: var(--red-bg);  color: var(--red);  border-color: rgba(224,62,62,.4); }
+
+  /* ── Scan row strip ── */
+  .scan-strip {
+    background: var(--surface2); border-radius: 10px; padding: 12px 14px;
+    border: 1px solid var(--border); margin-bottom: 10px;
+  }
+  .scan-strip-label { font-family: var(--font-mono); font-size: 9px; color: var(--faint); margin-bottom: 8px; }
+
+  /* ── Annotation box ── */
+  .annotation {
+    border-radius: 8px; padding: 10px 13px; font-size: 11px; line-height: 1.55;
+    margin-bottom: 10px;
+  }
+  .annotation.blue   { background: var(--blue-bg);   color: var(--blue);  border-left: 3px solid var(--blue); }
+  .annotation.red    { background: var(--red-bg);     color: var(--red);   border-left: 3px solid var(--red); }
+  .annotation.amber  { background: var(--amber-bg);  color: var(--amber); border-left: 3px solid var(--amber); }
+  .annotation.green  { background: var(--green-bg);  color: var(--green); border-left: 3px solid var(--green); }
+  .annotation strong { font-weight: 600; }
+
+  /* ── Footer ── */
+  .footer {
+    padding: 14px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  }
+  .footer-left  { display: flex; gap: 8px; flex-wrap: wrap; }
+  .footer-right { display: flex; gap: 8px; }
+  .btn {
+    font-family: var(--font-ui); font-size: 12px; font-weight: 500;
+    padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    border: none; background: var(--surface2); color: var(--text);
+    transition: all .35s ease; display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: #edf0f5; }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+  .btn.blue   { background: var(--blue-bg);   color: var(--blue); }
+  .btn.amber  { background: var(--amber-bg);  color: var(--amber); }
+  .btn.ghost  { background: transparent; color: var(--muted); }
+
+  /* ── Two-column explain panel ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .explain-panel {
+    border-radius: 10px; padding: 11px 13px;
+    border: 1px solid var(--border);
+  }
+  .explain-panel.red    { background: var(--red-bg);    border-color: rgba(224,62,62,.3); }
+  .explain-panel.blue   { background: var(--blue-bg);   border-color: rgba(26,127,232,.3); }
+  .explain-panel.green  { background: var(--green-bg);  border-color: rgba(24,168,100,.3); }
+  .explain-panel.amber  { background: var(--amber-bg);  border-color: rgba(217,123,16,.3); }
+  .explain-panel-title  { font-size: 11px; font-weight: 600; margin-bottom: 5px; }
+  .explain-panel.red   .explain-panel-title { color: var(--red); }
+  .explain-panel.blue  .explain-panel-title { color: var(--blue); }
+  .explain-panel.green .explain-panel-title { color: var(--green); }
+  .explain-panel.amber .explain-panel-title { color: var(--amber); }
+  .explain-panel-body { font-size: 10.5px; color: var(--muted); line-height: 1.55; }
+
+  /* ── Industry badge row ── */
+  .badge-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .badge {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 12px;
+    font-size: 11px; color: var(--text); font-weight: 500;
+  }
+  .badge-icon { font-size: 14px; }
+
+</style>
+</head>
+<body>
+<div id="cinematic-overlay"></div>
+<div class="card">
+
+  <!-- ── Header ── -->
+  <div class="header">
+    <div class="header-left">
+      <div class="tag">📜 Engineering Refresh</div>
+      <h1 id="header-title">Infinite Scroll &amp; Pagination</h1>
+      <p id="header-sub">How Facebook lets you scroll through years of posts without slowing down.</p>
+    </div>
+    <div class="header-right">
+      <div class="module-num">Chapter 06 / 12</div>
+      <div class="audio-ctrl on" id="audio-ctrl" onclick="toggleAudio()">
+        <div class="audio-dot"></div>
+        <span id="audio-label">Audio on</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Progress bar ── -->
+  <div class="progress-bar">
+    <div class="prog-step active" id="prog-0">Intro</div>
+    <div class="prog-step"        id="prog-1">1 · Naive</div>
+    <div class="prog-step"        id="prog-2">2 · Growth</div>
+    <div class="prog-step"        id="prog-3">3 · Drift</div>
+    <div class="prog-step"        id="prog-4">4 · Cursor</div>
+    <div class="prog-step"        id="prog-5">5 · Scale</div>
+    <div class="prog-step"        id="prog-6">6 · Summary</div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 0 — Intro
+  ══════════════════════════════════ -->
+  <div class="screen active" id="screen-0">
+    <div class="intro-screen">
+      <div class="narrator-dark" id="narrator">
+        <div class="narrator-icon">🎙</div>
+        <div><span id="narrator-text"></span><span class="speaking-dots" id="speaking-dots" style="display:none"><span></span><span></span><span></span></span></div>
+      </div>
+
+      <div class="intro-series-tag"><div class="dot"></div> Engineering Refresh · Chapter 06</div>
+      <div class="intro-headline">Infinite Scroll &amp; <span>Cursor Pagination</span></div>
+      <div class="intro-subline">
+        How does Facebook let you scroll through years of posts without the app slowing to a crawl?
+        The answer changed how every major feed on the internet is built.
+      </div>
+
+      <div class="intro-cards">
+        <div class="intro-card">
+          <span class="intro-card-icon">📄</span>
+          <div class="intro-card-title">The Page Number Illusion</div>
+          <div class="intro-card-text">OFFSET seems simple. But at page 5,000 the database must scan and discard 100,000 rows just to return 20.</div>
+        </div>
+
+        <div class="intro-card">
+          <span class="intro-card-icon">🌊</span>
+          <div class="intro-card-title">Infinite Scroll Changed Everything</div>
+          <div class="intro-card-text">Nobody clicks "page 57". Infinite scroll asks <em>what comes next</em> — a fundamentally different question.</div>
+        </div>
+
+        <div class="intro-card">
+          <span class="intro-card-icon">📉</span>
+          <div class="intro-card-title">The Drift Bug</div>
+          <div class="intro-card-text">A new post inserts while you scroll. OFFSET shifts every row — you see duplicates or miss posts entirely.</div>
+        </div>
+
+        <div class="intro-card">
+          <span class="intro-card-icon">⚡</span>
+          <div class="intro-card-title">O(1) vs O(n) at Depth</div>
+          <div class="intro-card-text">Cursor pagination costs the same at page 1 or page 5,000. OFFSET cost grows linearly with depth.</div>
+        </div>
+      </div>
+
+      <div class="intro-inspiration">
+        <div class="intro-insp-icon">📘</div>
+        <div>
+          <div class="intro-insp-title">Real-world inspiration · Facebook, Instagram, Twitter</div>
+          <div class="intro-insp-text">
+            Every major social feed — Facebook's News Feed, Instagram's Home Feed, Twitter's Timeline — switched from offset to cursor pagination early in their scaling journey. At hundreds of millions of users, a single deep-page OFFSET query was taking seconds and hammering the database on every scroll event.
+          </div>
+        </div>
+      </div>
+
+      <div class="intro-footer-row">
+        <div class="intro-footer-left">
+          <div class="intro-series-name">Engineering Refresh</div>
+          <div class="intro-series-meta">Chapter 06 of 12 · Pagination &amp; Infinite Scroll</div>
+        </div>
+        <button class="intro-start-btn" onclick="beginModule()">Start →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 1 — The Naive Facebook Feed
+  ══════════════════════════════════ -->
+  <div class="screen" id="screen-1">
+    <div class="narrator" id="narrator-1">
+      <div class="narrator-icon">🎙</div>
+      <div><span id="narrator-text-1"></span><span class="speaking-dots" id="speaking-dots-1" style="display:none"><span></span><span></span><span></span></span></div>
+    </div>
+
+    <div class="screen-title">The Naive Facebook Feed <span class="pill green">100 Users</span></div>
+    <div class="screen-sub">Facebook launches. A hundred users. A few hundred posts. Pagination is simple — and it works.</div>
+
+    <div class="annotation blue" style="margin-bottom:12px">
+      <strong>What is pagination?</strong> Your database has millions of rows. You can't send them all at once.
+      Pagination means: <em>give me rows N through N+20</em> — one chunk at a time.
+    </div>
+
+    <div class="section-label">📄 The query — page 1 of the feed</div>
+    <div class="query-box" id="s1-querybox"><span class="sql-cmt">-- Get the first 20 posts for the News Feed</span>
+<span class="sql-kw">SELECT</span>   post_id, content, author, created_at
+<span class="sql-kw">FROM</span>     <span class="sql-fn">posts</span>
+<span class="sql-kw">ORDER BY</span> created_at <span class="sql-kw">DESC</span>            <span class="sql-cmt">-- newest first</span>
+<span class="sql-kw">LIMIT</span>    <span class="sql-num">20</span>                           <span class="sql-cmt">-- return 20 posts</span>
+<span class="sql-kw">OFFSET</span>   <span class="sql-num" id="s1-offset-val">0</span>;                          <span class="sql-cmt" id="s1-offset-cmt">-- start from the beginning (page 1)</span></div>
+
+    <div class="section-label">🧠 How OFFSET works — the formula</div>
+    <div class="annotation blue" id="s1-formula-box" style="margin-bottom:10px">
+      <strong>OFFSET = (page number − 1) × page size</strong><br>
+      Page 1 → OFFSET 0 &nbsp;·&nbsp; Page 2 → OFFSET 20 &nbsp;·&nbsp; Page 3 → OFFSET 40 &nbsp;·&nbsp; Page 100 → OFFSET 1,980
+    </div>
+
+    <!-- Interactive page tabs -->
+    <div class="section-label">👆 Click a page — watch the query update</div>
+    <div class="page-tabs" id="s1-page-tabs">
+      <div class="page-tab active" id="s1-tab-1"  onclick="s1PreviewPage(1)">Page 1</div>
+      <div class="page-tab"        id="s1-tab-2"  onclick="s1PreviewPage(2)">Page 2</div>
+      <div class="page-tab"        id="s1-tab-3"  onclick="s1PreviewPage(3)">Page 3</div>
+      <div class="page-tab"        id="s1-tab-5"  onclick="s1PreviewPage(5)">Page 5</div>
+      <div class="page-tab"        id="s1-tab-10" onclick="s1PreviewPage(10)">Page 10</div>
+    </div>
+
+    <!-- Mini feed mockup -->
+    <div class="feed-mock" id="s1-feed" style="display:none">
+      <div class="feed-mock-header">
+        <span>📘 Facebook News Feed</span>
+        <span id="s1-feed-page-label" style="color:#f2cc60">Page 1 · OFFSET 0</span>
+      </div>
+      <div class="feed-post highlight" id="s1-post1">
+        <div class="feed-avatar">👩</div>
+        <div class="feed-post-body">
+          <div class="feed-post-meta">@alice · 2 min ago</div>
+          <div class="feed-post-text">Just shipped the new feature 🚀</div>
+        </div>
+      </div>
+      <div class="feed-post" id="s1-post2">
+        <div class="feed-avatar">👨</div>
+        <div class="feed-post-body">
+          <div class="feed-post-meta">@bob · 5 min ago</div>
+          <div class="feed-post-text">Hot take: dark mode is better</div>
+        </div>
+      </div>
+      <div class="feed-post" id="s1-post3">
+        <div class="feed-avatar">🧑</div>
+        <div class="feed-post-body">
+          <div class="feed-post-meta">@carol · 8 min ago</div>
+          <div class="feed-post-text">Anyone else love Monday mornings? 🙃</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-row" id="s1-stats" style="display:none">
+      <div class="stat-card" id="s1-qt">
+        <div class="stat-label">Query time</div>
+        <div class="stat-val" id="s1-qt-val">—</div>
+        <div class="stat-note" id="s1-qt-note"></div>
+      </div>
+      <div class="stat-card" id="s1-rows">
+        <div class="stat-label">Rows scanned</div>
+        <div class="stat-val" id="s1-rows-val">—</div>
+        <div class="stat-note" id="s1-rows-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 2 — Facebook Grows
+  ══════════════════════════════════ -->
+  <div class="screen" id="screen-2">
+    <div class="narrator" id="narrator-2">
+      <div class="narrator-icon">🎙</div>
+      <div><span id="narrator-text-2"></span><span class="speaking-dots" id="speaking-dots-2" style="display:none"><span></span><span></span><span></span></span></div>
+    </div>
+
+    <div class="screen-title">Facebook Grows <span class="pill red">100M Users</span></div>
+    <div class="screen-sub">Same query. Same SQL. Now the posts table has billions of rows — and the user keeps scrolling.</div>
+
+    <div class="section-label">📄 Deep in the feed — page 5,000</div>
+    <div class="query-box"><span class="sql-cmt">-- User has scrolled to page 5,000 of their feed</span>
+<span class="sql-kw">SELECT</span>   post_id, content, author, created_at
+<span class="sql-kw">FROM</span>     <span class="sql-fn">posts</span>                          <span class="sql-cmt">-- 5 billion rows now</span>
+<span class="sql-kw">ORDER BY</span> created_at <span class="sql-kw">DESC</span>
+<span class="sql-kw">LIMIT</span>    <span class="sql-num">20</span>
+<span class="sql-kw">OFFSET</span>   <span class="sql-num">99980</span>;                         <span class="sql-cmt">-- skip 99,980 rows first ← problem</span></div>
+
+    <div class="annotation red" id="s2-why" style="display:none">
+      <strong>Why is this slow?</strong> OFFSET does not jump. The database engine reads rows 1, 2, 3 … 99,980 sequentially, throws each one away, then returns rows 99,981–100,000. Every deep page is a full sequential scan from the beginning.
+    </div>
+
+    <!-- SVG scan diagram -->
+    <div class="scan-strip" id="s2-scanstrip" style="display:none">
+      <div class="scan-strip-label">posts table — what the DB does for OFFSET 99980</div>
+      <svg id="s2-svg" viewBox="0 0 640 64" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;overflow:visible">
+        <defs>
+          <marker id="arr2" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+            <path d="M0,0 L7,3.5 L0,7 Z" fill="#e03e3e"/>
+          </marker>
+          <marker id="arr2b" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+            <path d="M0,0 L7,3.5 L0,7 Z" fill="#1a7fe8"/>
+          </marker>
+        </defs>
+        <g id="s2-rowgroup"></g>
+        <!-- Labels placed by JS -->
+        <text id="s2-lbl-discard" x="0" y="60" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#e03e3e" opacity="0"></text>
+        <text id="s2-lbl-return"  x="0" y="60" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#1a7fe8" opacity="0"></text>
+      </svg>
+      <div style="display:flex;gap:14px;margin-top:6px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:9px;color:var(--red)">
+          <div style="width:12px;height:10px;background:var(--red-bg);border:1px solid var(--red);border-radius:2px"></div>
+          Scanned &amp; discarded (OFFSET rows)
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:9px;color:var(--blue)">
+          <div style="width:12px;height:10px;background:var(--blue-bg);border:1px solid var(--blue);border-radius:2px"></div>
+          Returned to client (LIMIT rows)
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-row" id="s2-stats" style="display:none">
+      <div class="stat-card" id="s2-qt">
+        <div class="stat-label">Query time (page 5,000)</div>
+        <div class="stat-val" id="s2-qt-val">—</div>
+        <div class="stat-note" id="s2-qt-note"></div>
+      </div>
+      <div class="stat-card" id="s2-scan">
+        <div class="stat-label">Rows scanned</div>
+        <div class="stat-val" id="s2-scan-val">—</div>
+        <div class="stat-note" id="s2-scan-note"></div>
+      </div>
+      <div class="stat-card" id="s2-eff">
+        <div class="stat-label">Efficiency</div>
+        <div class="stat-val" id="s2-eff-val">—</div>
+        <div class="stat-note" id="s2-eff-note"></div>
+      </div>
+      <div class="stat-card" id="s2-scale">
+        <div class="stat-label">Cost at depth</div>
+        <div class="stat-val" id="s2-scale-val">—</div>
+        <div class="stat-note" id="s2-scale-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 3 — The Feed Keeps Changing (Drift)
+  ══════════════════════════════════ -->
+  <div class="screen" id="screen-3">
+    <div class="narrator" id="narrator-3">
+      <div class="narrator-icon">🎙</div>
+      <div><span id="narrator-text-3"></span><span class="speaking-dots" id="speaking-dots-3" style="display:none"><span></span><span></span><span></span></span></div>
+    </div>
+
+    <div class="screen-title">The Feed Keeps Changing <span class="pill red">The Real Problem</span></div>
+    <div class="screen-sub">Performance was fixable. This is worse — OFFSET pagination gives you wrong results on a live feed.</div>
+
+    <div class="annotation amber" style="margin-bottom:12px">
+      <strong>The hidden assumption:</strong> OFFSET pagination assumes your data never changes between requests. Facebook's feed changes every second — this assumption is always wrong.
+    </div>
+
+    <!-- Two-column before/after scenario -->
+    <div class="section-label" id="s3-step1-lbl" style="display:none">① You load page 1 — posts A, B, C, D appear</div>
+    <div class="feed-mock" id="s3-feed-before" style="display:none">
+      <div class="feed-mock-header">
+        <span>📘 News Feed</span>
+        <span style="color:#f2cc60">Page 1 · OFFSET 0</span>
+      </div>
+      <div class="feed-post highlight"><div class="feed-avatar">🅰</div><div class="feed-post-body"><div class="feed-post-meta">Post A · 1 min ago</div><div class="feed-post-text">Alice: "Just shipped the redesign!"</div></div></div>
+      <div class="feed-post"><div class="feed-avatar">🅱</div><div class="feed-post-body"><div class="feed-post-meta">Post B · 3 min ago</div><div class="feed-post-text">Bob: "Monday motivation thread 🧵"</div></div></div>
+      <div class="feed-post"><div class="feed-avatar">🇨</div><div class="feed-post-body"><div class="feed-post-meta">Post C · 5 min ago</div><div class="feed-post-text">Carol: "Coffee or tea? ☕"</div></div></div>
+      <div class="feed-post"><div class="feed-avatar">🇩</div><div class="feed-post-body"><div class="feed-post-meta">Post D · 7 min ago</div><div class="feed-post-text">Dave: "New blog post: System Design 101"</div></div></div>
+    </div>
+
+    <div class="section-label" id="s3-step2-lbl" style="display:none">② While you read — a friend posts NEW</div>
+    <div class="feed-mock" id="s3-feed-insert" style="display:none">
+      <div class="feed-mock-header">
+        <span>📘 News Feed (database)</span>
+        <span style="color:#f2cc60">actual data — server side</span>
+      </div>
+      <div class="feed-post new-post"><div class="feed-avatar">🆕</div><div class="feed-post-body"><div class="feed-post-meta">NEW POST · just now — row #1 in DB</div><div class="feed-post-text">Eve: "Just joined Facebook! 👋" ← inserted at top</div></div></div>
+      <div class="feed-post"><div class="feed-avatar">🅰</div><div class="feed-post-body"><div class="feed-post-meta">Post A · 1 min ago — now row #2</div><div class="feed-post-text">Alice: "Just shipped the redesign!"</div></div></div>
+      <div class="feed-post"><div class="feed-avatar">🅱</div><div class="feed-post-body"><div class="feed-post-meta">Post B · 3 min ago — now row #3</div><div class="feed-post-text">Bob: "Monday motivation thread 🧵"</div></div></div>
+      <div class="feed-post"><div class="feed-avatar">🇨</div><div class="feed-post-body"><div class="feed-post-meta">Post C · 5 min ago — now row #4</div><div class="feed-post-text">Carol: "Coffee or tea? ☕"</div></div></div>
+    </div>
+
+    <div class="section-label" id="s3-step3-lbl" style="display:none">③ You scroll — page 2 arrives with OFFSET 4</div>
+    <div class="feed-mock" id="s3-feed-after" style="display:none">
+      <div class="feed-mock-header">
+        <span>📘 News Feed</span>
+        <span style="color:#e03e3e">Page 2 · OFFSET 4 — ⚠ drift!</span>
+      </div>
+      <div class="feed-post dupe"><div class="feed-avatar">🇩</div><div class="feed-post-body"><div class="feed-post-meta">Post D · seen this already on page 1!</div><div class="feed-post-text">Dave: "New blog post: System Design 101" ← DUPLICATE 🔁</div></div></div>
+      <div class="feed-post"><div class="feed-avatar">🇪</div><div class="feed-post-body"><div class="feed-post-meta">Post E</div><div class="feed-post-text">Ed: "Thoughts on remote work..."</div></div></div>
+    </div>
+
+    <div class="two-col" id="s3-explainers" style="display:none">
+      <div class="explain-panel amber">
+        <div class="explain-panel-title">Why Post D duplicated</div>
+        <div class="explain-panel-body">Page 1 loaded OFFSET 0–3 (posts A, B, C, D). New post inserted. Page 2 loads OFFSET 4 — but now offset 4 points to Post D again, shifted down by the insert.</div>
+      </div>
+      <div class="explain-panel red">
+        <div class="explain-panel-title">What about skipped posts?</div>
+        <div class="explain-panel-body">If a post is <em>deleted</em> instead of inserted, the opposite happens — rows shift up, and a post between page 1 and page 2 silently disappears. The user never sees it.</div>
+      </div>
+    </div>
+
+    <div class="verdict warn" id="s3-verdict" style="display:none">
+      <div class="verdict-icon">⚠</div>
+      <div>
+        <div class="verdict-title">This is the real reason cursor pagination exists</div>
+        <div class="verdict-body">Not performance. <strong>Consistency.</strong> OFFSET counts rows from the start each time. On a live feed that changes every second, that count is always stale. Cursor pagination bookmarks by <em>value</em> — new inserts can't shift it.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 4 — Cursor Pagination
+  ══════════════════════════════════ -->
+  <div class="screen" id="screen-4">
+    <div class="narrator" id="narrator-4">
+      <div class="narrator-icon">🎙</div>
+      <div><span id="narrator-text-4"></span><span class="speaking-dots" id="speaking-dots-4" style="display:none"><span></span><span></span><span></span></span></div>
+    </div>
+
+    <div class="screen-title">Cursor Pagination — The Fix <span class="pill blue">Solution</span></div>
+    <div class="screen-sub">Instead of counting rows from the top, bookmark your position by value. The database jumps directly there.</div>
+
+    <!-- Step 1: Schema -->
+    <div id="s4-schema" style="display:none;margin-bottom:14px">
+      <div class="section-label">🗄 Step 1 — A simple posts schema</div>
+      <div class="tables-row">
+        <div class="db-table" id="s4-posts-tbl">
+          <div class="table-header"><span>📝</span> posts</div>
+          <div class="table-field">id          <span class="field-pk">PK · auto-increment</span></div>
+          <div class="table-field">user_id     <span class="field-fk">FK → users</span></div>
+          <div class="table-field">content     <span class="field-type">text</span></div>
+          <div class="table-field">created_at  <span class="field-idx">INDEX ← cursor column</span></div>
+        </div>
+      </div>
+      <div class="annotation blue" style="margin-top:8px">
+        <strong>The cursor column must be:</strong> monotonic (always increasing), indexed (fast seek), and ideally unique. <code>created_at</code> or <code>id</code> are the classic choices.
+      </div>
+    </div>
+
+    <!-- Step 2: Query comparison -->
+    <div id="s4-query" style="display:none;margin-bottom:14px">
+      <div class="section-label">🔀 Step 2 — OFFSET vs Cursor, side by side</div>
+      <div class="two-col">
+        <div class="explain-panel red">
+          <div class="explain-panel-title">❌ OFFSET approach</div>
+          <div class="explain-panel-body" style="font-family:var(--font-mono);font-size:9px;line-height:1.8;color:#e03e3e">
+            SELECT * FROM posts<br>
+            ORDER BY created_at DESC<br>
+            LIMIT 20<br>
+            OFFSET 99980;<br>
+            <span style="color:var(--faint);font-size:8px">-- scans 99,980 rows first</span>
+          </div>
+        </div>
+        <div class="explain-panel green">
+          <div class="explain-panel-title">✓ Cursor approach</div>
+          <div class="explain-panel-body" style="font-family:var(--font-mono);font-size:9px;line-height:1.8;color:#18a864">
+            SELECT * FROM posts<br>
+            WHERE created_at &lt;<br>
+            &nbsp;&nbsp;'2024-03-15T14:22:09Z'<br>
+            ORDER BY created_at DESC<br>
+            LIMIT 20;<br>
+            <span style="color:var(--faint);font-size:8px">-- index seek · constant time</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: The API response with nextCursor -->
+    <div id="s4-api" style="display:none;margin-bottom:14px">
+      <div class="section-label">📡 Step 3 — The API returns a cursor token with every response</div>
+      <div class="query-box" style="font-size:11px;line-height:1.8">{
+  <span class="sql-fn">"posts"</span>: [
+    { <span class="sql-fn">"id"</span>: 8821, <span class="sql-fn">"content"</span>: <span class="sql-str">"Just shipped…"</span>, <span class="sql-fn">"created_at"</span>: <span class="sql-str">"2024-03-15T14:25:00Z"</span> },
+    { <span class="sql-fn">"id"</span>: 8820, <span class="sql-fn">"content"</span>: <span class="sql-str">"Hot take…"</span>,     <span class="sql-fn">"created_at"</span>: <span class="sql-str">"2024-03-15T14:22:09Z"</span> }
+  ],
+  <span class="sql-kw">"nextCursor"</span>: <span class="sql-str">"2024-03-15T14:22:09Z"</span>   <span class="sql-cmt">// ← timestamp of last post</span>
+}</div>
+      <div class="annotation blue" style="margin-top:8px">
+        <strong>Next request:</strong> <code>GET /feed?cursor=2024-03-15T14:22:09Z</code><br>
+        The server runs: <code>WHERE created_at &lt; '2024-03-15T14:22:09Z'</code> — index seek, instant.
+      </div>
+    </div>
+
+    <!-- Step 4: Architecture diagram -->
+    <div id="s4-arch" style="display:none">
+      <div class="section-label">🏗 Step 4 — Request flow</div>
+      <svg viewBox="0 0 640 80" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;margin-bottom:8px">
+        <rect x="10"  y="24" width="88" height="32" rx="8" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="54" y="36" text-anchor="middle" font-size="12" dominant-baseline="central">📱</text>
+        <text x="54" y="50" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="9" fill="#5a6478">Client scroll</text>
+
+        <line x1="98" y1="40" x2="130" y2="40" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <text x="114" y="36" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">cursor</text>
+
+        <rect x="130" y="24" width="110" height="32" rx="8" fill="#e8f2fd" stroke="#1a7fe8" stroke-width="1"/>
+        <text x="185" y="36" text-anchor="middle" font-size="12" dominant-baseline="central">⚙️</text>
+        <text x="185" y="50" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="9" fill="#1a7fe8">Feed Service</text>
+
+        <line x1="240" y1="40" x2="274" y2="40" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <text x="257" y="36" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">WHERE&lt;</text>
+
+        <rect x="274" y="24" width="110" height="32" rx="8" fill="#e6f7f0" stroke="#18a864" stroke-width="1"/>
+        <text x="329" y="36" text-anchor="middle" font-size="12" dominant-baseline="central">🗄</text>
+        <text x="329" y="50" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="9" fill="#18a864">Posts DB (indexed)</text>
+
+        <line x1="384" y1="40" x2="418" y2="40" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <text x="401" y="36" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">20 rows</text>
+
+        <rect x="418" y="24" width="110" height="32" rx="8" fill="#f3f0ff" stroke="#7c3aed" stroke-width="1"/>
+        <text x="473" y="36" text-anchor="middle" font-size="12" dominant-baseline="central">⚡</text>
+        <text x="473" y="50" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="9" fill="#7c3aed">Redis Cache</text>
+
+        <line x1="528" y1="40" x2="560" y2="40" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <text x="544" y="36" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">+cursor</text>
+
+        <rect x="560" y="24" width="68" height="32" rx="8" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="594" y="36" text-anchor="middle" font-size="12" dominant-baseline="central">📱</text>
+        <text x="594" y="50" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="9" fill="#5a6478">Client</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 5 — Performance Comparison
+  ══════════════════════════════════ -->
+  <div class="screen" id="screen-5">
+    <div class="narrator" id="narrator-5">
+      <div class="narrator-icon">🎙</div>
+      <div><span id="narrator-text-5"></span><span class="speaking-dots" id="speaking-dots-5" style="display:none"><span></span><span></span><span></span></span></div>
+    </div>
+
+    <div class="screen-title">Performance at Scale <span class="pill blue">Numbers</span></div>
+    <div class="screen-sub">Both methods return the same 20 posts. But how they get there is completely different.</div>
+
+    <!-- Side-by-side mechanism -->
+    <div class="section-label" id="s5-mech-lbl" style="display:none">⚙ What each method does internally</div>
+    <div class="two-col" id="s5-mech" style="display:none">
+      <div class="explain-panel red">
+        <div class="explain-panel-title">OFFSET — page 5,000</div>
+        <div class="explain-panel-body">
+          1. Read row 1 → discard<br>
+          2. Read row 2 → discard<br>
+          3. Read row 3 → discard<br>
+          ···<br>
+          99980. Read row 99,980 → discard<br>
+          99981. Read row 99,981 → <strong>keep</strong><br>
+          ···<br>
+          100000. Read row 100,000 → keep<br>
+          <span style="color:var(--red);font-size:9px;margin-top:4px;display:block">Total: 100,000 rows touched</span>
+        </div>
+      </div>
+      <div class="explain-panel green">
+        <div class="explain-panel-title">Cursor — any page</div>
+        <div class="explain-panel-body">
+          1. Look up cursor value in index<br>
+          2. Index points directly to position<br>
+          3. Read row N → keep<br>
+          4. Read row N+1 → keep<br>
+          ···<br>
+          20. Read row N+19 → keep<br>
+          <br>
+          <span style="color:var(--green);font-size:9px;margin-top:4px;display:block">Total: exactly 20 rows touched</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Animated bar chart -->
+    <div class="section-label" id="s5-chart-lbl" style="display:none">📊 Query time vs scroll depth (5B row table)</div>
+    <div id="s5-chart-wrap" style="display:none;background:var(--surface2);border-radius:10px;padding:14px 16px;border:1px solid var(--border);margin-bottom:12px">
+      <svg id="s5-svg" viewBox="0 0 580 140" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%">
+        <!-- Axes -->
+        <line x1="60" y1="10" x2="60" y2="110" stroke="#dde1ea" stroke-width="1.5"/>
+        <line x1="60" y1="110" x2="570" y2="110" stroke="#dde1ea" stroke-width="1.5"/>
+        <!-- Y labels -->
+        <text x="55" y="14"  text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">4s</text>
+        <text x="55" y="35"  text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">3s</text>
+        <text x="55" y="60"  text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">2s</text>
+        <text x="55" y="85"  text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">1s</text>
+        <text x="55" y="110" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">0</text>
+        <!-- Y gridlines -->
+        <line x1="60" y1="35" x2="570" y2="35" stroke="#dde1ea" stroke-width=".5" stroke-dasharray="3 3"/>
+        <line x1="60" y1="60" x2="570" y2="60" stroke="#dde1ea" stroke-width=".5" stroke-dasharray="3 3"/>
+        <line x1="60" y1="85" x2="570" y2="85" stroke="#dde1ea" stroke-width=".5" stroke-dasharray="3 3"/>
+        <!-- X labels (page depth) -->
+        <text x="95"  y="123" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">p1</text>
+        <text x="165" y="123" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">p500</text>
+        <text x="235" y="123" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">p1000</text>
+        <text x="305" y="123" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">p2000</text>
+        <text x="375" y="123" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">p3000</text>
+        <text x="445" y="123" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">p4000</text>
+        <text x="515" y="123" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">p5000</text>
+        <text x="315" y="135" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">page depth →</text>
+        <!-- OFFSET line (grows steeply, red) — drawn by JS animation -->
+        <polyline id="s5-offset-line" points="" fill="none" stroke="#e03e3e" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- Cursor line (flat, blue) — drawn by JS animation -->
+        <polyline id="s5-cursor-line" points="" fill="none" stroke="#1a7fe8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- Legend -->
+        <rect x="420" y="14" width="10" height="4" rx="1" fill="#e03e3e"/>
+        <text x="434" y="19" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#e03e3e">OFFSET (O(n))</text>
+        <rect x="420" y="26" width="10" height="4" rx="1" fill="#1a7fe8"/>
+        <text x="434" y="31" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#1a7fe8">Cursor (O(1))</text>
+      </svg>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="stats-row" id="s5-stats" style="display:none">
+      <div class="stat-card" id="s5-offset-t">
+        <div class="stat-label">OFFSET query time (p5000)</div>
+        <div class="stat-val" id="s5-offset-t-val">—</div>
+        <div class="stat-note" id="s5-offset-t-note"></div>
+      </div>
+      <div class="stat-card" id="s5-cursor-t">
+        <div class="stat-label">Cursor query time (any page)</div>
+        <div class="stat-val" id="s5-cursor-t-val">—</div>
+        <div class="stat-note" id="s5-cursor-t-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 6 — Summary
+  ══════════════════════════════════ -->
+  <div class="screen" id="screen-6">
+    <div class="narrator" id="narrator-6">
+      <div class="narrator-icon">🎙</div>
+      <div><span id="narrator-text-6"></span><span class="speaking-dots" id="speaking-dots-6" style="display:none"><span></span><span></span><span></span></span></div>
+    </div>
+
+    <div class="screen-title">Key Takeaways — Pagination in Production</div>
+    <div class="screen-sub">Two strategies. Different tradeoffs. One clear winner for live feeds at scale.</div>
+
+    <div class="concepts-grid">
+      <div class="concept-card">
+        <div class="concept-icon">📄</div>
+        <div class="concept-title">OFFSET Pagination</div>
+        <div class="concept-body">Works perfectly at small scale and for static data. Simple to implement. Breaks at depth with live data: O(n) scan cost, row drift on concurrent writes, silent duplicates and skips.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">🔖</div>
+        <div class="concept-title">Cursor Pagination</div>
+        <div class="concept-body">O(1) per page regardless of depth. Immune to drift — inserts and deletes can't shift the cursor. Requires a monotonic indexed column. Forward-only — no random page access.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">🌊</div>
+        <div class="concept-title">Infinite Scroll Pattern</div>
+        <div class="concept-body">Each API response returns a <code>nextCursor</code> token. On scroll trigger, client sends the token back. Server issues a WHERE seek. The user never sees a page number.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">🏭</div>
+        <div class="concept-title">Industry Adoption</div>
+        <div class="concept-body">Facebook News Feed, Instagram Home Feed, Twitter/X Timeline, LinkedIn Feed — all use cursor-based approaches. OFFSET is reserved for admin dashboards and internal tools.</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Comparison table -->
+    <table class="compare-table" id="s6-table" style="display:none">
+      <thead><tr><th>Criterion</th><th>OFFSET</th><th>Cursor</th></tr></thead>
+      <tbody>
+        <tr id="c6-perf">  <td>Deep page performance</td><td>O(n) scan ❌</td><td>O(1) seek ✓</td></tr>
+        <tr id="c6-drift">  <td>Drift on live data</td><td>Duplicates &amp; skips ❌</td><td>Stable ✓</td></tr>
+        <tr id="c6-jump">   <td>Random page jump</td><td>✓ easy</td><td>Forward-only ⚠</td></tr>
+        <tr id="c6-impl">   <td>Implementation</td><td>Trivial</td><td>Needs index + token</td></tr>
+        <tr id="c6-scroll"> <td>Infinite scroll</td><td>Breaks at depth ❌</td><td>✓ built for this</td></tr>
+        <tr id="c6-use">    <td>Best for</td><td>Admin / reports</td><td>Social feeds / streams</td></tr>
+      </tbody>
+    </table>
+
+    <!-- Industry badges -->
+    <div class="section-label" id="s6-badge-lbl" style="display:none">🌍 Who uses cursor pagination</div>
+    <div class="badge-row" id="s6-badges" style="display:none">
+      <div class="badge"><span class="badge-icon">📘</span> Facebook Feed</div>
+      <div class="badge"><span class="badge-icon">📸</span> Instagram Feed</div>
+      <div class="badge"><span class="badge-icon">🐦</span> Twitter / X</div>
+      <div class="badge"><span class="badge-icon">💼</span> LinkedIn</div>
+      <div class="badge"><span class="badge-icon">▶</span> YouTube</div>
+    </div>
+
+    <div class="verdict success" id="s6-verdict" style="display:none">
+      <div class="verdict-icon">💡</div>
+      <div>
+        <div class="verdict-title">The rule of thumb</div>
+        <div class="verdict-body">
+          Use OFFSET for admin dashboards, reports, and internal tools where data is static and page-jumping matters.
+          Use cursor pagination for any user-facing infinite scroll on live data.
+          The moment users can concurrently write to your feed, OFFSET becomes a bug factory — not just a performance problem.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Footer ── -->
+  <div class="footer">
+    <div class="footer-left">
+      <button class="btn ghost" id="btn-prev" onclick="prevScreen()" disabled>← Back</button>
+      <button class="btn blue"  id="btn-next" onclick="nextScreen()">Next →</button>
+    </div>
+    <div class="footer-right">
+      <button class="btn amber" id="btn-auto"    onclick="runAuto()">▶ Auto demo</button>
+      <button class="btn ghost" id="btn-pause"   onclick="togglePause()" style="display:none">⏸ Pause</button>
+      <button class="btn ghost" id="btn-restart" onclick="restart()">↺ Restart</button>
+    </div>
+  </div>
+
+</div><!-- .card -->
+<script>
+// ═══════════════════════════════════════════
+// AUDIO ENGINE  (identical to Chapter 1)
+// ═══════════════════════════════════════════
+let audioEnabled = true;
+let audioCtx = null;
+function getCtx(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();return audioCtx;}
+function toggleAudio(){
+  audioEnabled=!audioEnabled;
+  const ctrl=document.getElementById('audio-ctrl'),label=document.getElementById('audio-label');
+  ctrl.className='audio-ctrl'+(audioEnabled?' on':'');
+  label.textContent=audioEnabled?'Audio on':'Audio off';
+  if(!audioEnabled){window.speechSynthesis.cancel();}
+  else{try{getCtx().resume();}catch(e){}speak("Audio enabled.",0,null);}
+}
+let _cancelToken=0,_charOffset=0,_pausedText='',_pausedIdx=0,_pausedOnEnd=null;
+function _getVoice(){
+  const v=window.speechSynthesis.getVoices();
+  return v.find(x=>x.lang.startsWith('en')&&(x.name.includes('Google')||x.name.includes('Samantha')||x.name.includes('Daniel')||x.name.includes('Alex')))||v.find(x=>x.lang.startsWith('en'));
+}
+function _narEl(idx,sfx){
+  const s=idx>0?'-'+idx:'';
+  return{ntxt:document.getElementById('narrator-text'+s),ndots:document.getElementById('speaking-dots'+s),nbubble:document.getElementById('narrator'+s)};
+}
+function _showNarrator(idx,text){const e=_narEl(idx);if(e.ntxt)e.ntxt.textContent=text;if(e.ndots)e.ndots.style.display='inline';if(e.nbubble)e.nbubble.classList.add('visible');}
+function _hideNarrator(idx){const e=_narEl(idx);if(e.ndots)e.ndots.style.display='none';if(e.nbubble)e.nbubble.classList.remove('visible');}
+function _doSpeak(text,startChar,screenIdx,onEnd,token){
+  window.speechSynthesis.cancel();
+  const rem=text.slice(startChar);if(!rem.trim()){if(onEnd)onEnd();return;}
+  _showNarrator(screenIdx,text);
+  const u=new SpeechSynthesisUtterance(rem);u.rate=0.95;u.pitch=1.0;
+  const v=_getVoice();if(v)u.voice=v;
+  u.onboundary=e=>{if(_cancelToken!==token)return;if(e.name==='word')_charOffset=startChar+(e.charIndex||0);};
+  u.onend=()=>{if(_cancelToken!==token)return;_hideNarrator(screenIdx);_pausedText='';_charOffset=0;_pausedOnEnd=null;if(onEnd)onEnd();};
+  u.onerror=e=>{if(_cancelToken!==token)return;if(e.error==='interrupted'||e.error==='canceled')return;_hideNarrator(screenIdx);if(onEnd)onEnd();};
+  window.speechSynthesis.speak(u);
+}
+function speak(text,screenIdx,onEnd){
+  if(!audioEnabled){if(onEnd)onEnd();return;}
+  _cancelToken++;const myToken=_cancelToken;
+  _charOffset=0;_pausedText=text;_pausedIdx=screenIdx;_pausedOnEnd=onEnd;
+  _doSpeak(text,0,screenIdx,onEnd,myToken);
+}
+function speakWait(text,screenIdx){return new Promise(resolve=>speak(text,screenIdx,resolve));}
+function tone(freq,type,dur,vol=0.12){if(!audioEnabled)return;try{const ctx=getCtx(),o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(vol,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+dur);o.start();o.stop(ctx.currentTime+dur);}catch(e){}}
+const sfx={
+  click:  ()=>tone(700,'sine',.07,.08),
+  data:   ()=>tone(1100,'square',.04,.05),
+  success:()=>[523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,'sine',.18,.11),i*80)),
+  warn:   ()=>[440,370,311].forEach((f,i)=>setTimeout(()=>tone(f,'sawtooth',.15,.10),i*100)),
+  error:  ()=>[190,160].forEach((f,i)=>setTimeout(()=>tone(f,'sawtooth',.25,.14),i*120)),
+  pop:    ()=>tone(900,'sine',.06,.09),
+  chord:  ()=>[261,329,392,523].forEach((f,i)=>setTimeout(()=>tone(f,'sine',.28,.09),i*55)),
+};
+
+// ═══════════════════════════════════════════
+// SCREEN ENGINE
+// ═══════════════════════════════════════════
+let currentScreen=0;
+const TOTAL=7;
+let busy=false,paused=false,pauseResolve=null;
+
+function delay(ms){
+  return new Promise(resolve=>{
+    const start=Date.now();
+    function tick(){if(paused){setTimeout(tick,100);return;}const e=Date.now()-start;if(e>=ms)resolve();else setTimeout(tick,Math.min(100,ms-e));}
+    tick();
+  });
+}
+
+function showPauseBtn(show){
+  const btn=document.getElementById('btn-pause');if(!btn)return;
+  btn.style.display=show?'flex':'none';
+  if(!show){paused=false;btn.textContent='⏸ Pause';btn.classList.remove('blue');btn.classList.add('ghost');}
+}
+function togglePause(){
+  const btn=document.getElementById('btn-pause');paused=!paused;
+  if(paused){window.speechSynthesis.cancel();btn.textContent='▶ Resume';btn.classList.add('blue');btn.classList.remove('ghost');}
+  else{btn.textContent='⏸ Pause';btn.classList.remove('blue');btn.classList.add('ghost');
+    if(_pausedText)_doSpeak(_pausedText,_charOffset,_pausedIdx,_pausedOnEnd,_cancelToken);
+    if(pauseResolve){pauseResolve();pauseResolve=null;}
+  }
+}
+
+function showScreen(idx){
+  document.querySelectorAll('.screen').forEach((s,i)=>s.classList.toggle('active',i===idx));
+  for(let i=0;i<TOTAL;i++){
+    const p=document.getElementById('prog-'+i);if(!p)continue;
+    // Screen 2 (growth/breaking) marks prog-1 as warn once passed
+    if(i===1&&idx>=3){p.className='prog-step warn done';}
+    else{p.className='prog-step'+(i<idx?' done':i===idx?' active':'');}
+  }
+  currentScreen=idx;
+  document.getElementById('btn-prev').disabled=idx===0;
+  document.getElementById('btn-next').style.display=idx===TOTAL-1?'none':'flex';
+}
+
+async function goToScreen(idx,animate=true){
+  if(busy)return;busy=true;
+  _cancelToken++;                        // cancel any in-flight sub-animations
+  window.speechSynthesis.cancel();_pausedText='';paused=false;
+  showScreen(idx);showPauseBtn(true);
+  if(animate)await screenAnimations[idx]();
+  showPauseBtn(false);busy=false;
+}
+async function nextScreen(){
+  if(currentScreen<TOTAL-1){
+    _cancelToken++;window.speechSynthesis.cancel();_pausedText='';busy=false;paused=false;showPauseBtn(false);
+    sfx.click();await goToScreen(currentScreen+1);
+  }
+}
+async function prevScreen(){
+  if(currentScreen>0){
+    _cancelToken++;window.speechSynthesis.cancel();_pausedText='';busy=false;paused=false;showPauseBtn(false);
+    sfx.click();resetAll();await goToScreen(currentScreen-1,true);
+  }
+}
+
+// ═══════════════════════════════════════════
+// RESET
+// ═══════════════════════════════════════════
+function resetAll(){
+  // S1
+  s1PreviewPage(1);
+  document.getElementById('s1-feed').style.display='none';
+  document.getElementById('s1-stats').style.display='none';
+  ['s1-qt','s1-rows'].forEach(id=>{const el=document.getElementById(id);if(el)el.className='stat-card';});
+  ['s1-qt-val','s1-qt-note','s1-rows-val','s1-rows-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=id.endsWith('-val')?'—':'';});
+  // S2
+  document.getElementById('s2-why').style.display='none';
+  document.getElementById('s2-scanstrip').style.display='none';
+  document.getElementById('s2-stats').style.display='none';
+  document.getElementById('s2-rowgroup').innerHTML='';
+  ['s2-qt','s2-scan','s2-eff','s2-scale'].forEach(id=>{const el=document.getElementById(id);if(el)el.className='stat-card';const v=document.getElementById(id+'-val');const n=document.getElementById(id+'-note');if(v)v.textContent='—';if(n)n.textContent='';});
+  // S3
+  ['s3-feed-before','s3-feed-insert','s3-feed-after','s3-explainers'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+  ['s3-step1-lbl','s3-step2-lbl','s3-step3-lbl','s3-verdict'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+  // S4
+  ['s4-schema','s4-query','s4-api','s4-arch'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+  document.getElementById('s4-posts-tbl').className='db-table';
+  // S5
+  ['s5-mech-lbl','s5-mech','s5-chart-lbl','s5-chart-wrap','s5-stats'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+  document.getElementById('s5-offset-line').setAttribute('points','');
+  document.getElementById('s5-cursor-line').setAttribute('points','');
+  ['s5-offset-t','s5-cursor-t'].forEach(id=>{const el=document.getElementById(id);if(el)el.className='stat-card';const v=document.getElementById(id+'-val');const n=document.getElementById(id+'-note');if(v)v.textContent='—';if(n)n.textContent='';});
+  // S6
+  document.getElementById('s6-table').style.display='none';
+  ['s6-badge-lbl','s6-badges','s6-verdict'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+  ['c6-perf','c6-drift','c6-jump','c6-impl','c6-scroll','c6-use'].forEach(id=>{const el=document.getElementById(id);if(el)el.className='';});
+}
+
+// ═══════════════════════════════════════════
+// S1 helpers
+// ═══════════════════════════════════════════
+function s1PreviewPage(n){
+  const offset=(n-1)*20;
+  document.getElementById('s1-offset-val').textContent=offset;
+  document.getElementById('s1-offset-cmt').textContent=`-- skip ${offset} rows · return rows ${offset+1}–${offset+20} (page ${n})`;
+  ['s1-tab-1','s1-tab-2','s1-tab-3','s1-tab-5','s1-tab-10'].forEach(id=>document.getElementById(id).className='page-tab');
+  const map={1:'s1-tab-1',2:'s1-tab-2',3:'s1-tab-3',5:'s1-tab-5',10:'s1-tab-10'};
+  if(map[n])document.getElementById(map[n]).className='page-tab active';
+  // update feed label if visible
+  const lbl=document.getElementById('s1-feed-page-label');
+  if(lbl)lbl.textContent=`Page ${n} · OFFSET ${offset}`;
+}
+
+// ═══════════════════════════════════════════
+// S2 scan diagram builder
+// ═══════════════════════════════════════════
+async function buildScan(){
+  const myToken = _cancelToken;
+  const g=document.getElementById('s2-rowgroup'); g.innerHTML='';
+  const STEP=19,BLOCK=17,TOTAL_B=32,OFFSET_B=27,LIMIT_B=5;
+  const rects=[];
+  for(let i=0;i<TOTAL_B;i++){
+    const r=document.createElementNS('http://www.w3.org/2000/svg','rect');
+    r.setAttribute('x',i*STEP); r.setAttribute('y',6);
+    r.setAttribute('width',BLOCK); r.setAttribute('height',44);
+    r.setAttribute('rx',3); r.setAttribute('fill','#f5f7fa');
+    r.setAttribute('stroke','#dde1ea'); r.setAttribute('stroke-width',1);
+    g.appendChild(r); rects.push(r);
+  }
+  for(let i=0;i<OFFSET_B;i++){
+    if(_cancelToken !== myToken) return;
+    rects[i].setAttribute('fill','#fdeaea'); rects[i].setAttribute('stroke','#e03e3e');
+    sfx.data(); await delay(55);
+  }
+  for(let i=OFFSET_B;i<OFFSET_B+LIMIT_B;i++){
+    if(_cancelToken !== myToken) return;
+    rects[i].setAttribute('fill','#e8f2fd'); rects[i].setAttribute('stroke','#1a7fe8');
+    rects[i].setAttribute('stroke-width',1.5);
+    sfx.pop(); await delay(80);
+  }
+  if(_cancelToken !== myToken) return;
+  const ld=document.getElementById('s2-lbl-discard');
+  ld.setAttribute('x',(OFFSET_B*STEP)/2); ld.textContent='OFFSET 99,980 rows — scanned & discarded'; ld.setAttribute('opacity',1);
+  const lr=document.getElementById('s2-lbl-return');
+  lr.setAttribute('x',(OFFSET_B+LIMIT_B/2)*STEP); lr.textContent='20 returned'; lr.setAttribute('opacity',1);
+}
+
+// ═══════════════════════════════════════════
+// S5 chart animator
+// ═══════════════════════════════════════════
+async function animateChart(){
+  const myToken = _cancelToken;
+  const xPts     = [75,145,215,285,355,425,500];
+  const offsetMs = [2,200,500,1100,1900,2800,3800];
+  const cursorMs = [8,8,8,8,8,8,8];
+  const msToY = ms => 110 - (ms / 4000) * 96;
+
+  let offPts = '', curPts = '';
+  for(let i = 0; i < xPts.length; i++){
+    if(_cancelToken !== myToken) return;   // screen changed — exit cleanly
+    offPts += `${xPts[i]},${msToY(offsetMs[i]).toFixed(1)} `;
+    curPts += `${xPts[i]},${msToY(cursorMs[i]).toFixed(1)} `;
+    const ol = document.getElementById('s5-offset-line');
+    const cl = document.getElementById('s5-cursor-line');
+    if(ol) ol.setAttribute('points', offPts.trim());
+    if(cl) cl.setAttribute('points', curPts.trim());
+    sfx.data();
+    await delay(220);
+  }
+  if(_cancelToken !== myToken) return;
+  sfx.warn();
+}
+
+// ═══════════════════════════════════════════
+// SCREEN ANIMATIONS
+// ═══════════════════════════════════════════
+async function animateScreen0(){
+  document.querySelectorAll('.intro-card').forEach(c=>c.classList.remove('animating'));
+  const insp=document.querySelector('.intro-inspiration');if(insp)insp.classList.remove('animating');
+  await speakWait("Welcome to Chapter 6: Infinite Scroll and Cursor Pagination. Here's the opening question: How does Facebook let you scroll through years of posts without the app slowing to a crawl?",0);
+  await delay(500);
+  const cards=document.querySelectorAll('.intro-card');
+  for(let i=0;i<cards.length;i++){sfx.data();cards[i].classList.add('animating');await delay(1400);}
+  await delay(300);if(insp)insp.classList.add('animating');sfx.pop();await delay(600);
+  await speakWait("The answer changed how every major social feed on the internet is built. Facebook, Instagram, Twitter — all of them made the same switch. Let's find out why.",0);
+}
+
+async function animateScreen1(){
+  await speakWait("Facebook launches with a hundred users. Pagination is the solution — instead of loading every post at once, we load twenty at a time.",1);
+  await delay(600);
+  await speakWait("The formula is simple: OFFSET equals page number minus one, times page size. Page one: OFFSET zero. Page two: OFFSET 20. Page three: OFFSET 40.",1);
+  await delay(500);
+  // cycle through pages to show the formula working
+  for(const n of [2,3,5,10,1]){s1PreviewPage(n);sfx.click();await delay(700);}
+  await delay(400);
+  // reveal feed mockup
+  document.getElementById('s1-feed').style.display='block';
+  sfx.data();
+  await delay(600);
+  await speakWait("At 100 users with a few hundred posts, this works perfectly. The database has almost nothing to scan.",1);
+  await delay(500);
+  // reveal stats
+  document.getElementById('s1-stats').style.display='grid';
+  sfx.data();
+  const qt=document.getElementById('s1-qt');qt.className='stat-card good';
+  document.getElementById('s1-qt-val').textContent='2 ms';
+  document.getElementById('s1-qt-note').textContent='✓ Trivially fast at small scale';
+  await delay(1000);
+  sfx.data();
+  const rows=document.getElementById('s1-rows');rows.className='stat-card good';
+  document.getElementById('s1-rows-val').textContent='~200';
+  document.getElementById('s1-rows-note').textContent='✓ Small table, full scan is negligible';
+  await delay(800);
+  sfx.success();
+  await speakWait("Two milliseconds. The problem is completely invisible here — and that's exactly what makes it dangerous. You'll ship OFFSET to production and it will work great. Until it doesn't.",1);
+}
+
+async function animateScreen2(){
+  await speakWait("Three years later, Facebook has 100 million daily active users. The posts table has five billion rows. And users keep scrolling — deeper and deeper into their feed.",2);
+  await delay(800);
+  document.getElementById('s2-why').style.display='block';
+  sfx.warn();
+  await speakWait("Page 5,000 means OFFSET 99,980. The critical thing to understand: OFFSET does not jump. The database engine reads row one, row two, row three — all the way to row 99,980 — throws every single one away, then returns the twenty you asked for.",2);
+  await delay(600);
+  // scan strip
+  document.getElementById('s2-scanstrip').style.display='block';
+  await buildScan();
+  await delay(400);
+  await speakWait("Watch the animation. Every red block is a row the database reads and immediately discards. Only the blue blocks come back to you. At page 5,000, you're discarding 99,980 rows on every single scroll event.",2);
+  await delay(600);
+  // stats
+  document.getElementById('s2-stats').style.display='grid';
+  sfx.error();
+  const qt=document.getElementById('s2-qt');qt.className='stat-card bad';
+  document.getElementById('s2-qt-val').textContent='3.8s';
+  document.getElementById('s2-qt-note').textContent='✗ Was 2ms — now 1,900× slower';
+  await delay(1100);
+  sfx.error();
+  const scan=document.getElementById('s2-scan');scan.className='stat-card bad';
+  document.getElementById('s2-scan-val').textContent='99,980';
+  document.getElementById('s2-scan-note').textContent='✗ Rows read before returning any result';
+  await delay(1100);
+  sfx.error();
+  const eff=document.getElementById('s2-eff');eff.className='stat-card bad';
+  document.getElementById('s2-eff-val').textContent='0.02%';
+  document.getElementById('s2-eff-note').textContent='✗ 1 in 5,000 rows read is actually used';
+  await delay(1100);
+  sfx.error();
+  const sc=document.getElementById('s2-scale');sc.className='stat-card bad';
+  document.getElementById('s2-scale-val').textContent='O(n)';
+  document.getElementById('s2-scale-note').textContent='✗ Cost grows linearly with scroll depth';
+  await delay(800);
+  sfx.warn();
+  await speakWait("3.8 seconds. Every scroll event. At 100 million users, each doing this dozens of times a day — the database is on fire.",2);
+}
+
+async function animateScreen3(){
+  await speakWait("Performance is bad. But there's a second problem, and it's worse — because it gives you wrong data silently. Facebook's feed changes every second. OFFSET pagination assumes it never changes.",3);
+  await delay(700);
+  // step 1
+  document.getElementById('s3-step1-lbl').style.display='block';
+  document.getElementById('s3-feed-before').style.display='block';
+  sfx.data();
+  await speakWait("You load page one. You see posts A, B, C, D. You start reading.",3);
+  await delay(700);
+  // step 2
+  document.getElementById('s3-step2-lbl').style.display='block';
+  document.getElementById('s3-feed-insert').style.display='block';
+  sfx.warn();
+  await speakWait("While you're reading, your friend Eve posts something. This new post inserts at the top of the database — row number one. Every existing post shifts down by one position.",3);
+  await delay(700);
+  // step 3
+  document.getElementById('s3-step3-lbl').style.display='block';
+  document.getElementById('s3-feed-after').style.display='block';
+  sfx.error();
+  await speakWait("You scroll. Page two loads with OFFSET 4. But offset 4 now points to Post D — the same post you already saw on page one. It's a duplicate. And Post E, which should have been on page one, was silently skipped entirely.",3);
+  await delay(700);
+  document.getElementById('s3-explainers').style.display='grid';
+  sfx.data();
+  await delay(800);
+  document.getElementById('s3-verdict').style.display='flex';
+  sfx.chord();
+  await speakWait("This is the real reason cursor pagination was invented. Not performance. Consistency. On a live feed, OFFSET is always counting from a starting line that keeps moving.",3);
+}
+
+async function animateScreen4(){
+  await speakWait("The fix is cursor pagination. Instead of counting rows from the top of the table, we bookmark our exact position by value — and next time, we seek directly to that value using the index.",4);
+  await delay(700);
+  // step 1: schema
+  document.getElementById('s4-schema').style.display='block';
+  sfx.data();
+  document.getElementById('s4-posts-tbl').className='db-table highlight';
+  await speakWait("Step one: make sure your cursor column is indexed. We use created_at with an index. The column must be monotonic — always increasing — so the cursor always moves in one direction.",4);
+  await delay(700);
+  // step 2: query comparison
+  document.getElementById('s4-query').style.display='block';
+  sfx.data();
+  await speakWait("Step two: replace OFFSET with a WHERE clause. Instead of 'skip 99,980 rows', we say 'give me posts where created_at is less than the last timestamp I saw'. The index jumps directly there — no scanning.",4);
+  await delay(700);
+  // step 3: API token
+  document.getElementById('s4-api').style.display='block';
+  sfx.data();
+  await speakWait("Step three: the API returns a nextCursor token with every response — the timestamp of the last post. The client sends it back on the next request. The server issues a WHERE seek. Constant time, every time.",4);
+  await delay(700);
+  // step 4: architecture
+  document.getElementById('s4-arch').style.display='block';
+  sfx.chord();
+  await speakWait("The full flow: client sends a cursor, Feed Service issues a WHERE seek on the indexed Posts DB, optional Redis cache warms popular cursors, and the response includes the next cursor. No row counting at any step.",4);
+}
+
+async function animateScreen5(){
+  await speakWait("Let's make the performance difference concrete. Both methods return the same twenty posts. But how they get there is completely different.",5);
+  await delay(600);
+  document.getElementById('s5-mech-lbl').style.display='block';
+  document.getElementById('s5-mech').style.display='grid';
+  sfx.data();
+  await speakWait("OFFSET reads row one, two, three — all the way to row 99,980 — and throws each one away. That's 100,000 rows touched to return 20. Cursor looks up the index value, seeks directly to that position, and reads exactly 20 rows. Nothing wasted.",5);
+  await delay(800);
+  document.getElementById('s5-chart-lbl').style.display='block';
+  document.getElementById('s5-chart-wrap').style.display='block';
+  sfx.data();
+  await animateChart();
+  await delay(500);
+  await speakWait("Watch the chart. OFFSET query time grows steeply as you scroll deeper — nearly 4 seconds at page 5,000. The cursor line is completely flat. Page 1 or page 5,000 — it doesn't matter. The index always delivers in under 10 milliseconds.",5);
+  await delay(600);
+  document.getElementById('s5-stats').style.display='grid';
+  sfx.error();
+  const ot=document.getElementById('s5-offset-t');ot.className='stat-card bad';
+  document.getElementById('s5-offset-t-val').textContent='3,800ms';
+  document.getElementById('s5-offset-t-note').textContent='✗ At page 5,000 on a 5B row table';
+  await delay(900);
+  sfx.success();
+  const ct=document.getElementById('s5-cursor-t');ct.className='stat-card good';
+  document.getElementById('s5-cursor-t-val').textContent='8ms';
+  document.getElementById('s5-cursor-t-note').textContent='✓ Constant time at any scroll depth';
+  await delay(600);
+  sfx.success();
+  await speakWait("475 times faster. And that gap grows — the deeper users scroll, the worse OFFSET gets, while cursor stays flat forever.",5);
+}
+
+async function animateScreen6(){
+  await speakWait("Let's close with the full picture. Two pagination strategies, each with a clear purpose.",6);
+  await delay(700);
+  // concepts already rendered — just narrate, then reveal table
+  sfx.data();await delay(600);
+  document.getElementById('s6-table').style.display='table';
+  const rows=['c6-perf','c6-drift','c6-jump','c6-impl','c6-scroll','c6-use'];
+  const cls=['bad-row','bad-row','blue-row','','bad-row','blue-row'];
+  for(let i=0;i<rows.length;i++){sfx.data();document.getElementById(rows[i]).className=cls[i];await delay(450);}
+  await delay(500);
+  document.getElementById('s6-badge-lbl').style.display='block';
+  document.getElementById('s6-badges').style.display='flex';
+  sfx.data();
+  await delay(500);
+  document.getElementById('s6-verdict').style.display='flex';
+  sfx.chord();
+  await speakWait("The rule of thumb: use OFFSET for admin dashboards and reports on static data. Use cursor pagination for any user-facing infinite scroll on live data. The moment users can write to your feed concurrently, OFFSET becomes a bug factory — not just a performance problem.",6);
+}
+
+// ═══════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════
+const screenAnimations=[
+  animateScreen0,animateScreen1,animateScreen2,
+  animateScreen3,animateScreen4,animateScreen5,animateScreen6
+];
+
+async function animateScreen1Intro(){
+  await speakWait("Let's start with Infinite Scroll and Cursor Pagination.",1);await delay(600);
+  await speakWait("The central question: how do you paginate a live feed that changes every second — at hundreds of millions of users — without slowing down or returning wrong results?",1);await delay(800);
+  await speakWait("We'll start with the simple approach Facebook used at launch, and watch exactly where it breaks.",1);await delay(800);
+}
+
+async function beginModule(){
+  if(busy)return;busy=true;paused=false;sfx.click();showPauseBtn(true);
+  const intro=document.getElementById('screen-0'),next=document.getElementById('screen-1'),ov=document.getElementById('cinematic-overlay');
+  intro.classList.add('sliding-out');await delay(680);
+  intro.classList.remove('sliding-out');intro.classList.remove('active');
+  ov.classList.add('fade-in');await delay(700);
+  next.classList.add('active');currentScreen=1;showScreen(1);
+  document.getElementById('btn-prev').disabled=false;
+  ov.classList.remove('fade-in');ov.classList.add('fade-out');
+  next.classList.add('slide-in');await delay(800);
+  next.classList.remove('slide-in');ov.classList.remove('fade-out');
+  window.speechSynthesis.cancel();
+  await animateScreen1Intro();
+  await animateScreen1();
+  showPauseBtn(false);busy=false;
+}
+
+function restart(){
+  _cancelToken++;window.speechSynthesis.cancel();_pausedText='';busy=false;paused=false;showPauseBtn(false);
+  sfx.click();resetAll();
+  document.querySelectorAll('.intro-card').forEach(c=>c.classList.remove('animating'));
+  const insp=document.querySelector('.intro-inspiration');if(insp)insp.classList.remove('animating');
+  showScreen(0);document.getElementById('btn-prev').disabled=true;document.getElementById('btn-next').style.display='flex';
+}
+
+async function runAuto(){
+  if(busy)return;sfx.click();resetAll();
+  document.querySelectorAll('.intro-card').forEach(c=>c.classList.remove('animating'));
+  const insp=document.querySelector('.intro-inspiration');if(insp)insp.classList.remove('animating');
+  busy=false; await goToScreen(0); await delay(1800);
+  busy=false; await beginModule();  await delay(1800);
+  for(let i=2;i<TOTAL;i++){
+    busy=false;
+    await goToScreen(i);
+    await delay(1800);
+  }
+}
+
+if(window.speechSynthesis){window.speechSynthesis.getVoices();window.speechSynthesis.onvoiceschanged=()=>window.speechSynthesis.getVoices();}
+showScreen(0);
+</script>
+</body>
+</html>
