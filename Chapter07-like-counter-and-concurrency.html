@@ -1,0 +1,1673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 7 — The "Like" Counter &amp; Concurrency | Engineering Refresh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #f0f2f5;
+    --surface:   #ffffff;
+    --surface2:  #f5f7fa;
+    --border:    #dde1ea;
+    --border2:   #c4cad8;
+    --text:      #1a1f2e;
+    --muted:     #5a6478;
+    --faint:     #9aa3b5;
+    --blue:      #1a7fe8;
+    --blue-bg:   #e8f2fd;
+    --green:     #18a864;
+    --green-bg:  #e6f7f0;
+    --red:       #e03e3e;
+    --red-bg:    #fdeaea;
+    --amber:     #d97b10;
+    --amber-bg:  #fef3e2;
+    --purple:    #7c3aed;
+    --purple-bg: #f3f0ff;
+    --font-ui:   'DM Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: none;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 700px;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  .header {
+    padding: 18px 24px 16px;
+    border-bottom: none;
+    display: flex; align-items: flex-start;
+    justify-content: space-between; gap: 12px;
+  }
+  .header-left { flex: 1; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--blue); background: var(--blue-bg);
+    border: 1px solid rgba(26,127,232,.25); border-radius: 6px;
+    padding: 3px 9px; margin-bottom: 8px;
+  }
+  .header h1 { font-size: 19px; font-weight: 600; margin-bottom: 3px; }
+  .header p  { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+  .module-num {
+    font-family: var(--font-mono); font-size: 11px; color: var(--faint);
+    background: var(--surface2); border: none;
+    border-radius: 8px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  /* ── Audio toggle ── */
+  .audio-ctrl {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface2); border: none;
+    border-radius: 8px; padding: 5px 10px; cursor: pointer;
+    font-size: 11px; color: var(--muted); transition: all .35s ease;
+    user-select: none;
+  }
+  .audio-ctrl:hover { border-color: var(--border2); background: #edf0f5; }
+  .audio-ctrl.on { background: var(--blue-bg); border-color: rgba(26,127,232,.4); color: var(--blue); }
+  .audio-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); transition: background .2s; }
+  .audio-ctrl.on .audio-dot { background: var(--blue); animation: pulse 2.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.3);opacity:.6} }
+
+  /* ── Step progress bar ── */
+  .progress-bar {
+    display: flex; gap: 0;
+    border-bottom: none;
+  }
+  .prog-step {
+    flex: 1; padding: 8px 0; text-align: center;
+    font-family: var(--font-mono); font-size: 9px;
+    color: var(--faint); background: var(--surface2);
+    border-right: none;
+    transition: all .7s cubic-bezier(0.4,0,0.2,1); cursor: default;
+  }
+  .prog-step:last-child { border-right: none; }
+  .prog-step.active { background: var(--blue-bg); color: var(--blue); font-weight: 500; }
+  .prog-step.done   { background: var(--green-bg); color: var(--green); }
+  .prog-step.warn   { background: var(--red-bg);   color: var(--red); }
+
+  /* ── Screen container ── */
+  .screen-wrap { min-height: 340px; position: relative; }
+
+  .screen {
+    display: none;
+    padding: 20px 24px;
+    animation: fadeIn .9s cubic-bezier(0.22,0.61,0.36,1);
+  }
+  .screen.active { display: block; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ── Narrator bubble ── */
+  .narrator {
+    padding: 10px 14px; margin-bottom: 16px;
+    background: var(--blue-bg); border: none;
+    border-radius: 10px; font-size: 12px; color: var(--blue); line-height: 1.6;
+    display: none; align-items: flex-start; gap: 8px;
+  }
+  .narrator.visible { display: flex; }
+  .narrator-icon { font-size: 15px; flex-shrink: 0; }
+  .speaking-dots span {
+    display: inline-block; width: 4px; height: 4px; border-radius: 50%;
+    background: var(--blue); margin: 0 1px; vertical-align: middle;
+    animation: bounce 1.8s ease-in-out infinite;
+  }
+  .speaking-dots span:nth-child(2) { animation-delay: .2s; }
+  .speaking-dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+
+  /* ── Screen titles ── */
+  .screen-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+  .screen-sub   { font-size: 12px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+
+  /* ── Stat callouts ── */
+  .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat-card {
+    background: var(--surface2); border: none;
+    border-radius: 10px; padding: 12px 14px;
+    transition: border-color .7s cubic-bezier(0.4,0,0.2,1), background .7s cubic-bezier(0.4,0,0.2,1);
+  }
+  .stat-card.good { border-color: var(--green); background: var(--green-bg); }
+  .stat-card.bad  { border-color: var(--red);   background: var(--red-bg); }
+  .stat-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+  .stat-card.good .stat-label { color: var(--green); }
+  .stat-card.bad  .stat-label { color: var(--red); }
+  .stat-val   { font-size: 22px; font-weight: 600; font-family: var(--font-mono); color: var(--text); }
+  .stat-card.good .stat-val { color: var(--green); }
+  .stat-card.bad  .stat-val { color: var(--red); }
+  .stat-unit  { font-size: 11px; color: var(--muted); }
+  .stat-note  { font-size: 10px; color: var(--faint); margin-top: 4px; }
+  .stat-card.good .stat-note { color: var(--green); opacity: .8; }
+  .stat-card.bad  .stat-note { color: var(--red);   opacity: .8; }
+
+  /* ── Verdict banner ── */
+  .verdict {
+    border-radius: 10px; padding: 14px 16px;
+    display: flex; align-items: flex-start; gap: 12px;
+    font-size: 13px; line-height: 1.5;
+  }
+  .verdict.success { background: var(--green-bg); border: none; color: var(--green); }
+  .verdict.fail    { background: var(--red-bg);   border: 1px solid rgba(224,62,62,.3);  color: var(--red); }
+  .verdict.info    { background: var(--blue-bg);  border: none; color: var(--blue); }
+  .verdict-icon { font-size: 20px; flex-shrink: 0; }
+  .verdict-title { font-weight: 600; font-size: 14px; margin-bottom: 3px; }
+  .verdict-body  { font-size: 12px; opacity: .85; }
+
+  /* ── Footer nav ── */
+  .footer {
+    padding: 14px 24px;
+    border-top: none;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    flex-wrap: wrap;
+  }
+  .footer-left  { display: flex; gap: 8px; flex-wrap: wrap; }
+  .footer-right { display: flex; gap: 8px; }
+
+  .btn {
+    font-family: var(--font-ui); font-size: 12px; font-weight: 500;
+    padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    border: none; background: var(--surface2); color: var(--text);
+    transition: all .35s cubic-bezier(0.4,0,0.2,1); display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: #edf0f5; border-color: var(--border2); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+  .btn.green  { background: var(--green-bg);  color: var(--green); }
+  .btn.red    { background: var(--red-bg);    color: var(--red); }
+  .btn.blue   { background: var(--blue-bg);   color: var(--blue); }
+  .btn.purple { background: var(--purple-bg); color: var(--purple); }
+  .btn.amber  { background: var(--amber-bg);  color: var(--amber); }
+  .btn.ghost  { background: transparent; border-color: var(--border); color: var(--muted); }
+
+  /* ── Divider ── */
+  .divider { height: 1px; background: transparent; margin: 14px 0; }
+
+  /* ── Pill ── */
+  .pill {
+    display: inline-flex; align-items: center;
+    font-family: var(--font-mono); font-size: 9px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px; vertical-align: middle; margin-left: 4px;
+  }
+  .pill.green { background: var(--green-bg); color: var(--green); }
+  .pill.red   { background: var(--red-bg);   color: var(--red); }
+  .pill.blue  { background: var(--blue-bg);  color: var(--blue); }
+  .pill.amber { background: var(--amber-bg); color: var(--amber); }
+
+  /* ── Intro screen ── */
+  .intro-screen { background: var(--surface); padding: 20px 24px 18px; position: relative; }
+  .intro-series-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: 9px; font-weight: 500;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--blue); background: var(--blue-bg);
+    border: none; border-radius: 20px;
+    padding: 3px 10px; margin-bottom: 12px;
+  }
+  .intro-series-tag .dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--blue); animation: pulse 1.6s ease-in-out infinite;
+  }
+  .intro-headline {
+    font-size: 19px; font-weight: 700; line-height: 1.25;
+    color: var(--text); margin-bottom: 4px; letter-spacing: -.01em;
+  }
+  .intro-headline span { color: var(--blue); }
+  .intro-subline { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
+  .intro-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .intro-card {
+    background: var(--surface2); border: none;
+    border-radius: 10px; padding: 10px 12px;
+    transition: border-color .2s; position: relative; overflow: hidden;
+  }
+  .intro-card::after {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--card-glow, var(--blue)), transparent);
+    border-radius: 10px 10px 0 0;
+  }
+  .intro-card-icon { font-size: 18px; margin-bottom: 7px; display: block; line-height: 1; }
+  .intro-card-icon svg { display: block; }
+  .intro-card-title { font-size: 11.5px; font-weight: 600; color: var(--text); margin-bottom: 3px; line-height: 1.2; }
+  .intro-card-text  { font-size: 10px; color: var(--muted); line-height: 1.5; }
+  .intro-inspiration {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--green-bg); border: none;
+    border-left: 3px solid var(--green);
+    border-radius: 10px; padding: 11px 13px; margin-bottom: 12px;
+  }
+  .intro-insp-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+  .intro-insp-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 4px;
+  }
+  .intro-insp-text { font-size: 11px; color: var(--muted); line-height: 1.55; }
+  .intro-footer-row {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+  .intro-footer-left { display: flex; flex-direction: column; gap: 2px; }
+  .intro-series-name {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+    letter-spacing: .08em; color: var(--text); text-transform: uppercase;
+  }
+  .intro-series-meta { font-family: var(--font-mono); font-size: 9px; color: var(--faint); letter-spacing: .05em; }
+  .intro-start-btn {
+    font-family: var(--font-ui); font-size: 12px; font-weight: 600;
+    padding: 8px 18px; border-radius: 8px; cursor: pointer; border: none;
+    background: var(--blue); color: #fff;
+    display: flex; align-items: center; gap: 6px;
+    transition: opacity .15s; white-space: nowrap;
+  }
+  .intro-start-btn:hover { opacity: .88; }
+  .intro-card:nth-child(1) { --card-glow: var(--blue); }
+  .intro-card:nth-child(2) { --card-glow: var(--purple); }
+  .intro-card:nth-child(3) { --card-glow: var(--green); }
+  .intro-card:nth-child(4) { --card-glow: var(--amber); }
+
+  /* ── Narrator dark (intro) ── */
+  .narrator-dark {
+    padding: 9px 13px; margin-bottom: 12px;
+    background: var(--blue-bg); border: none;
+    border-radius: 10px; font-size: 12px; color: var(--blue); line-height: 1.5;
+    display: none; align-items: flex-start; gap: 8px;
+  }
+  .narrator-dark.visible { display: flex; }
+
+  /* ── Staggered card entry ── */
+  @keyframes cardEntry {
+    from { opacity: 0; transform: translateY(28px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .intro-card.animating {
+    opacity: 0; animation: cardEntry 1.6s cubic-bezier(0.22,0.61,0.36,1) forwards;
+  }
+  .intro-card.animating:nth-child(1) { animation-delay: .15s; }
+  .intro-card.animating:nth-child(2) { animation-delay: .45s; }
+  .intro-card.animating:nth-child(3) { animation-delay: .75s; }
+  .intro-card.animating:nth-child(4) { animation-delay: 1.05s; }
+
+  @keyframes inspEntry {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .intro-inspiration.animating {
+    opacity: 0; animation: inspEntry 1s cubic-bezier(0.22,0.61,0.36,1) 1.35s forwards;
+  }
+
+  /* ── Screen slide transitions ── */
+  @keyframes slideOut { from { opacity:1; transform:translateX(0); } to { opacity:0; transform:translateX(-28px); } }
+  .screen.sliding-out {
+    display: block !important;
+    animation: slideOut .7s cubic-bezier(0.4,0,1,1) forwards;
+    pointer-events: none;
+  }
+  @keyframes slideIn { from { opacity:0; transform:translateX(28px); } to { opacity:1; transform:translateX(0); } }
+  .screen.slide-in { animation: slideIn .8s cubic-bezier(0.22,0.61,0.36,1) forwards !important; }
+
+  /* ── Cinematic overlay ── */
+  #cinematic-overlay {
+    position: fixed; inset: 0; z-index: 9999;
+    background: var(--surface); opacity: 0; pointer-events: none;
+    transition: opacity .7s cubic-bezier(0.4,0,0.2,1);
+  }
+  #cinematic-overlay.fade-in  { opacity: 1; pointer-events: all; }
+  #cinematic-overlay.fade-out { opacity: 0; pointer-events: none; }
+
+  /* ── Header transitions ── */
+  .header h1, .header p { transition: opacity .65s cubic-bezier(0.4,0,0.2,1), transform .65s cubic-bezier(0.4,0,0.2,1); }
+  .header h1.fading, .header p.fading { opacity: 0; transform: translateY(-4px); }
+  .module-num { transition: opacity .5s ease; }
+  .module-num.fading { opacity: 0; }
+
+  /* ── Concepts grid (summary) ── */
+  .concepts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .concept-card { background: var(--surface2); border: none; border-radius: 10px; padding: 12px; }
+  .concept-icon  { font-size: 18px; margin-bottom: 6px; }
+  .concept-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+  }
+  .concept-body { font-size: 11px; color: var(--faint); line-height: 1.5; }
+
+  /* ── Scenario selector ── */
+  .scenario-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .scenario-tab {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    padding: 6px 12px; border-radius: 8px; cursor: pointer; border: none;
+    background: var(--surface2); color: var(--muted);
+    transition: all .25s; user-select: none;
+  }
+  .scenario-tab.active-hit  { background: var(--green-bg); color: var(--green); }
+  .scenario-tab.active-miss { background: var(--red-bg);   color: var(--red); }
+  .scenario-tab.active-cdn  { background: var(--blue-bg);  color: var(--blue); }
+
+  /* ── SVG flow diagram wrapper ── */
+  .flow-wrap {
+    background: var(--surface2); border-radius: 12px;
+    padding: 14px; margin-bottom: 12px;
+    position: relative; overflow: visible;
+  }
+  .flow-label {
+    font-family: var(--font-mono); font-size: 9.5px; font-weight: 500;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  /* ── Packet animation ── */
+  .packet {
+    position: absolute;
+    width: 10px; height: 10px; border-radius: 50%;
+    pointer-events: none; z-index: 10;
+    transform: translate(-50%, -50%);
+    transition: none;
+    opacity: 0;
+  }
+  .packet.request { background: var(--blue); box-shadow: 0 0 6px rgba(26,127,232,.5); }
+  .packet.response-green { background: var(--green); box-shadow: 0 0 6px rgba(24,168,100,.5); }
+  .packet.response-blue  { background: var(--blue);  box-shadow: 0 0 6px rgba(26,127,232,.5); }
+  .packet.response-red   { background: var(--red);   box-shadow: 0 0 6px rgba(224,62,62,.5); }
+
+  /* ── Comparison table ── */
+  .compare-table {
+    width: 100%; border-collapse: collapse;
+    font-family: var(--font-mono); font-size: 10.5px; margin-bottom: 12px;
+  }
+  .compare-table th {
+    padding: 7px 12px; text-align: left;
+    background: var(--surface2); color: var(--muted); border: none;
+    font-weight: 500; text-transform: uppercase; letter-spacing: .06em; font-size: 9px;
+  }
+  .compare-table td {
+    padding: 8px 12px; border: none; color: var(--text);
+    vertical-align: top; line-height: 1.5;
+    transition: background .5s ease, color .5s ease;
+  }
+  .compare-table tr.highlight-row td { background: var(--blue-bg);  color: var(--blue); }
+  .compare-table tr.good-row   td    { background: var(--green-bg); color: var(--green); }
+  .compare-table tr.bad-row    td    { background: var(--red-bg);   color: var(--red); }
+  .compare-table td:first-child { font-weight: 500; color: var(--muted); font-size: 9.5px; white-space: nowrap; }
+
+  /* ── Latency numbers table ── */
+  .latency-row {
+    display: flex; align-items: center; gap: 10px; padding: 6px 0;
+    border-bottom: 1px solid var(--border); font-size: 11px;
+    transition: background .4s;
+  }
+  .latency-row:last-child { border-bottom: none; }
+  .latency-bar-wrap { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .latency-bar { height: 100%; border-radius: 3px; width: 0; transition: width 1.2s cubic-bezier(0.22,0.61,0.36,1); }
+  .latency-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); min-width: 130px; }
+  .latency-val   { font-family: var(--font-mono); font-size: 10px; font-weight: 500; min-width: 60px; text-align: right; }
+  .bar-fast    { background: var(--green); }
+  .bar-medium  { background: var(--amber); }
+  .bar-slow    { background: var(--red); }
+
+  /* ── Cache hit/miss indicator ── */
+  .cache-indicator {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    padding: 3px 8px; border-radius: 5px; margin-left: 6px;
+  }
+  .cache-indicator.hit  { background: var(--green-bg); color: var(--green); }
+  .cache-indicator.miss { background: var(--red-bg);   color: var(--red); }
+  .cache-indicator.cdn  { background: var(--blue-bg);  color: var(--blue); }
+
+  /* ── Node highlight flash ── */
+  @keyframes nodeFlash {
+    0%   { opacity: 1; }
+    30%  { opacity: 0.3; }
+    60%  { opacity: 1; }
+    100% { opacity: 1; }
+  }
+  .node-flash { animation: nodeFlash .5s ease-in-out; }
+
+  /* ── Race condition timeline (Like Counter module) ── */
+  .race-track { background: var(--surface2); border-radius: 10px; padding: 14px; margin-bottom: 4px; }
+  .race-lane { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .race-lane:last-child { margin-bottom: 0; }
+  .race-name {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+    color: var(--muted); min-width: 62px; flex-shrink: 0;
+  }
+  .race-steps { display: flex; gap: 8px; flex: 1; flex-wrap: wrap; }
+  .race-step {
+    font-family: var(--font-mono); font-size: 10px; color: var(--faint);
+    background: var(--surface); border-radius: 6px; padding: 5px 10px;
+    opacity: .35; transition: opacity .4s ease, background .4s ease, color .4s ease, transform .4s ease;
+  }
+  .race-step.active { opacity: 1; background: var(--blue-bg); color: var(--blue); transform: translateY(-1px); }
+  .race-step.bad { opacity: 1; background: var(--red-bg); color: var(--red); transform: translateY(-1px); }
+  .race-step.good { opacity: 1; background: var(--green-bg); color: var(--green); }
+  .race-result {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text);
+    background: var(--surface); border-radius: 8px; padding: 8px 12px; margin-top: 10px;
+  }
+
+  /* ── Counter display (Like Counter module) ── */
+  .counter-display {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono); font-weight: 700;
+  }
+  .counter-heart { font-size: 22px; }
+  .counter-num { font-size: 28px; color: var(--text); transition: color .3s ease; }
+  .counter-num.good { color: var(--green); }
+  .counter-num.bad  { color: var(--red); }
+
+</style>
+</head>
+<body>
+<div id="cinematic-overlay"></div>
+<div class="card">
+
+  <!-- ── Header ── -->
+  <div class="header">
+    <div class="header-left">
+      <div class="tag">❤️ Engineering Refresh</div>
+      <h1 id="header-title">The "Like" Counter &amp; Concurrency</h1>
+      <p id="header-sub">From a single UPDATE statement to a viral post with 50,000 concurrent likes — and what breaks in between.</p>
+    </div>
+    <div class="header-right">
+      <div class="module-num" id="module-num">Chapter 07</div>
+      <div class="audio-ctrl on" id="audio-ctrl" onclick="toggleAudio()">
+        <div class="audio-dot" style="background:var(--blue);animation:pulse 1.2s ease-in-out infinite"></div>
+        <span id="audio-label">Audio on</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step progress ── -->
+  <div class="progress-bar" id="progress-bar">
+    <div class="prog-step active" id="prog-0">Purpose</div>
+    <div class="prog-step"        id="prog-1">1 · Simple</div>
+    <div class="prog-step"        id="prog-2">2 · Viral</div>
+    <div class="prog-step"        id="prog-3">3 · Atomic</div>
+    <div class="prog-step"        id="prog-4">4 · Batch</div>
+    <div class="prog-step"        id="prog-5">5 · Numbers</div>
+    <div class="prog-step"        id="prog-6">6 · Summary</div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 0 — Purpose / Intro
+  ══════════════════════════════════ -->
+  <div class="screen active" id="screen-0">
+    <div class="intro-screen">
+      <div class="narrator-dark" id="narrator"><div class="narrator-icon">🎙</div><div><span id="narrator-text"></span><span class="speaking-dots" id="speaking-dots" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+      <div class="intro-cards">
+        <div class="intro-card">
+          <span class="intro-card-icon">🫥</span>
+          <div class="intro-card-title">Races Hide at Low Scale</div>
+          <div class="intro-card-text">A read-modify-write bug is invisible with one user clicking at a time. It only shows up when hundreds do it in the same millisecond.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">🔒</span>
+          <div class="intro-card-title">Locks Kill Throughput</div>
+          <div class="intro-card-text">Row locks make writes correct but serial. Under a thundering herd, thousands of requests queue up waiting for one row.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">⚛️</span>
+          <div class="intro-card-title">Atomic Ops Win</div>
+          <div class="intro-card-text">A single atomic instruction — like Redis INCR — has no gap between read and write. There is no race to lose.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">🌊</span>
+          <div class="intro-card-title">Eventual Consistency Is Fine</div>
+          <div class="intro-card-text">Nobody notices if a like count is 2 seconds stale. Relaxing consistency where correctness allows it buys enormous scale.</div>
+        </div>
+      </div>
+
+      <div class="intro-inspiration">
+        <div class="intro-insp-icon">🧵</div>
+        <div>
+          <div class="intro-insp-title">The Core Insight</div>
+          <div class="intro-insp-text">The fix for a concurrency bug is rarely "add a lock." It's redesigning the operation to be atomic, and relaxing consistency guarantees exactly where the domain allows — which for a like counter, is almost everywhere.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 1 — Simple State (30 users)
+  ══════════════════════════════════ -->
+  <div class="screen" id="screen-1">
+    <div class="narrator" id="narrator-1"><div class="narrator-icon">🎙</div><div><span id="narrator-text-1"></span><span class="speaking-dots" id="speaking-dots-1" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">The Simple Increment <span class="pill green">30 likes/min <span style="font-weight:400;opacity:.7">(a small number)</span></span></div>
+    <div class="screen-sub">One row. One UPDATE statement. Read the count, add one, write it back.</div>
+
+    <div class="query-box">
+<span class="sql-cmt">-- Read-modify-write: read the count, then write count+1</span>
+<span class="sql-kw">SELECT</span> like_count <span class="sql-kw">FROM</span> <span class="sql-fn">posts</span> <span class="sql-kw">WHERE</span> id = <span class="sql-num">{postId}</span>;
+<span class="sql-cmt">-- app does: newCount = like_count + 1</span>
+<span class="sql-kw">UPDATE</span> <span class="sql-fn">posts</span> <span class="sql-kw">SET</span> like_count = <span class="sql-num">{newCount}</span> <span class="sql-kw">WHERE</span> id = <span class="sql-num">{postId}</span>;
+    </div>
+
+    <!-- SVG flow: Client → API → DB row -->
+    <div class="flow-wrap" id="flow-s1">
+      <div class="flow-label" id="flow-label-1">One request, one gap between read and write</div>
+      <svg id="svg-s1" viewBox="0 0 652 130" style="display:block;width:100%;overflow:visible" xmlns="http://www.w3.org/2000/svg">
+        <!-- Client -->
+        <rect id="n1-client" x="30" y="28" width="82" height="74" rx="12" fill="#e8f2fd" stroke="#1a7fe8" stroke-width="1.5"/>
+        <text x="71" y="60" text-anchor="middle" font-size="20">👆</text>
+        <text x="71" y="77" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#1a7fe8" font-weight="600">Client</text>
+        <text x="71" y="89" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#1a7fe8" opacity="0.65">taps ❤️</text>
+
+        <!-- Arrow 1 -->
+        <line id="line-s1-1" x1="112" y1="65" x2="236" y2="65" stroke="#dde1ea" stroke-width="1.5" stroke-dasharray="5 3"/>
+        <text x="174" y="57" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#9aa3b5">POST /like</text>
+
+        <!-- API Server -->
+        <rect id="n1-api" x="236" y="28" width="90" height="74" rx="12" fill="#e8f2fd" stroke="#1a7fe8" stroke-width="1.5"/>
+        <text x="281" y="58" text-anchor="middle" font-size="18">🖥</text>
+        <text x="281" y="78" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#1a7fe8" font-weight="600">API Server</text>
+        <text x="281" y="90" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#1a7fe8" opacity="0.65">read → +1 → write</text>
+
+        <!-- Arrow 2 -->
+        <line id="line-s1-2" x1="326" y1="65" x2="450" y2="65" stroke="#dde1ea" stroke-width="1.5" stroke-dasharray="5 3"/>
+        <text x="388" y="57" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#9aa3b5">SELECT + UPDATE</text>
+
+        <!-- DB row -->
+        <rect id="n1-db" x="450" y="28" width="90" height="74" rx="12" fill="#e6f7f0" stroke="#18a864" stroke-width="1.5"/>
+        <rect x="463" y="52" width="64" height="20" rx="5" fill="#18a864" fill-opacity="0.18" stroke="#18a864" stroke-width="1.2"/>
+        <text id="s1-count-val" x="495" y="63" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="11" fill="#18a864" font-weight="600" dominant-baseline="central">like_count</text>
+        <text x="495" y="89" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#18a864" font-weight="600">posts row</text>
+
+        <!-- Response time note -->
+        <text id="s1-resp-label" x="326" y="118" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#9aa3b5" opacity="0">One tap at a time — the gap never gets exploited</text>
+      </svg>
+    </div>
+
+    <div class="stats-row" id="stats-s1">
+      <div class="stat-card" id="s1-rtt">
+        <div class="stat-label">Latency per like</div>
+        <div class="stat-val" id="s1-rtt-val">—</div>
+        <div class="stat-note" id="s1-rtt-note"></div>
+      </div>
+      <div class="stat-card" id="s1-db">
+        <div class="stat-label">Lost updates</div>
+        <div class="stat-val" id="s1-db-val">—</div>
+        <div class="stat-note" id="s1-db-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 2 — Breaking Point
+  ══════════════════════════════════ -->
+  <div class="screen" id="screen-2">
+    <div class="narrator" id="narrator-2"><div class="narrator-icon">🎙</div><div><span id="narrator-text-2"></span><span class="speaking-dots" id="speaking-dots-2" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Viral Post — 50,000 Concurrent Likes <span class="pill red">Breaking</span></div>
+    <div class="screen-sub">Same read-modify-write code. Now thousands of requests hit the same row in the same instant.</div>
+
+    <div class="query-box">
+<span class="sql-cmt">-- Two requests, same millisecond, same row</span>
+<span class="sql-kw">SELECT</span> like_count <span class="sql-kw">FROM</span> <span class="sql-fn">posts</span> <span class="sql-kw">WHERE</span> id = <span class="sql-num">42</span>;  <span class="sql-cmt">-- both read 100</span>
+<span class="sql-kw">UPDATE</span> <span class="sql-fn">posts</span> <span class="sql-kw">SET</span> like_count = <span class="sql-num">101</span> <span class="sql-kw">WHERE</span> id = <span class="sql-num">42</span>;  <span class="sql-cmt">-- both write 101 ☠</span>
+    </div>
+
+    <div class="flow-wrap" id="flow-s2">
+      <div class="flow-label">The race — two requests, one lost update</div>
+      <div class="race-track" id="race-track">
+        <div class="race-lane">
+          <div class="race-name">Thread A</div>
+          <div class="race-steps">
+            <div class="race-step" id="a-read">READ 100</div>
+            <div class="race-step" id="a-add">+1 → 101</div>
+            <div class="race-step" id="a-write">WRITE 101</div>
+          </div>
+        </div>
+        <div class="race-lane">
+          <div class="race-name">Thread B</div>
+          <div class="race-steps">
+            <div class="race-step" id="b-read">READ 100</div>
+            <div class="race-step" id="b-add">+1 → 101</div>
+            <div class="race-step" id="b-write">WRITE 101</div>
+          </div>
+        </div>
+      </div>
+      <div class="race-result" id="race-result" style="display:none">
+        Final value: <span style="color:var(--red);font-weight:700">101</span> — expected <span style="color:var(--green);font-weight:700">102</span>. One like vanished. Neither request errored. Nothing logged it.
+      </div>
+    </div>
+
+    <div class="stats-row" id="stats-s2">
+      <div class="stat-card" id="s2-rtt">
+        <div class="stat-label">Query time under contention</div>
+        <div class="stat-val" id="s2-rtt-val">—</div>
+        <div class="stat-note" id="s2-rtt-note"></div>
+      </div>
+      <div class="stat-card" id="s2-db">
+        <div class="stat-label">Lost updates</div>
+        <div class="stat-val" id="s2-db-val">—</div>
+        <div class="stat-note" id="s2-db-note"></div>
+      </div>
+      <div class="stat-card" id="s2-img">
+        <div class="stat-label">Row lock wait</div>
+        <div class="stat-val" id="s2-img-val">—</div>
+        <div class="stat-note" id="s2-img-note"></div>
+      </div>
+      <div class="stat-card" id="s2-hit">
+        <div class="stat-label">DB CPU</div>
+        <div class="stat-val" id="s2-hit-val">—</div>
+        <div class="stat-note" id="s2-hit-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 3 — Redis Cache Solution
+  ══════════════════════════════════ -->
+  <div class="screen" id="screen-3">
+    <div class="narrator" id="narrator-3"><div class="narrator-icon">🎙</div><div><span id="narrator-text-3"></span><span class="speaking-dots" id="speaking-dots-3" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Fix 1 — Atomic Increment <span class="pill blue">Solution</span></div>
+    <div class="screen-sub">Replace read-then-write with a single atomic instruction. There is no gap left to race in.</div>
+
+    <div class="query-box">
+<span class="sql-cmt">// One atomic instruction — read and write happen as one step</span>
+<span class="sql-kw">INCR</span> <span class="sql-fn">post:42:likes</span>   <span class="sql-cmt">// Redis guarantees this can't interleave</span>
+    </div>
+
+    <div class="flow-wrap" id="flow-s3">
+      <div class="flow-label" id="flow-label-3">Two requests, same instant — now no race</div>
+      <svg id="svg-s3" viewBox="0 0 652 130" style="display:block;width:100%;overflow:visible" xmlns="http://www.w3.org/2000/svg">
+        <!-- Thread A -->
+        <rect x="20" y="14" width="82" height="46" rx="10" fill="#e8f2fd" stroke="#1a7fe8" stroke-width="1.5"/>
+        <text x="61" y="33" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="10" fill="#1a7fe8" font-weight="600">Thread A</text>
+        <text x="61" y="47" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#1a7fe8" opacity="0.7">INCR</text>
+        <!-- Thread B -->
+        <rect x="20" y="70" width="82" height="46" rx="10" fill="#e8f2fd" stroke="#1a7fe8" stroke-width="1.5"/>
+        <text x="61" y="89" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="10" fill="#1a7fe8" font-weight="600">Thread B</text>
+        <text x="61" y="103" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#1a7fe8" opacity="0.7">INCR</text>
+
+        <!-- Arrows into a queue funnel -->
+        <line x1="102" y1="37" x2="230" y2="65" stroke="#dde1ea" stroke-width="1.5" stroke-dasharray="4 2"/>
+        <line x1="102" y1="93" x2="230" y2="65" stroke="#dde1ea" stroke-width="1.5" stroke-dasharray="4 2"/>
+
+        <!-- Redis single-threaded event loop -->
+        <rect id="n3-redis" x="230" y="28" width="130" height="74" rx="12" fill="#e6f7f0" stroke="#18a864" stroke-width="1.5"/>
+        <text x="295" y="52" text-anchor="middle" font-size="18">⚛️</text>
+        <text x="295" y="72" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#18a864" font-weight="600">Redis</text>
+        <text x="295" y="86" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#18a864" opacity="0.75">single-threaded queue</text>
+
+        <!-- Serialized processing steps -->
+        <line x1="360" y1="65" x2="410" y2="65" stroke="#dde1ea" stroke-width="1.5" stroke-dasharray="4 2"/>
+        <rect x="410" y="28" width="80" height="30" rx="8" fill="#e6f7f0" stroke="#18a864" stroke-width="1.2"/>
+        <text id="s3-step-a" x="450" y="47" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#18a864" font-weight="600" opacity="0">A: 100→101</text>
+        <rect x="410" y="66" width="80" height="30" rx="8" fill="#e6f7f0" stroke="#18a864" stroke-width="1.2"/>
+        <text id="s3-step-b" x="450" y="85" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#18a864" font-weight="600" opacity="0">B: 101→102</text>
+
+        <line x1="490" y1="65" x2="530" y2="65" stroke="#dde1ea" stroke-width="1.5" stroke-dasharray="4 2"/>
+        <text x="592" y="52" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#18a864" font-weight="700" id="s3-final-val">count = 102</text>
+        <text x="592" y="68" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#18a864" opacity="0.8">✓ nothing lost</text>
+      </svg>
+    </div>
+
+    <div class="stats-row" id="stats-s3">
+      <div class="stat-card" id="s3-hit-time">
+        <div class="stat-label">Lost updates</div>
+        <div class="stat-val" id="s3-hit-time-val">—</div>
+        <div class="stat-note" id="s3-hit-time-note"></div>
+      </div>
+      <div class="stat-card" id="s3-miss-time">
+        <div class="stat-label">Latency per like</div>
+        <div class="stat-val" id="s3-miss-time-val">—</div>
+        <div class="stat-note" id="s3-miss-time-note"></div>
+      </div>
+      <div class="stat-card" id="s3-hit-rate">
+        <div class="stat-label">Throughput (single node)</div>
+        <div class="stat-val" id="s3-hit-rate-val">—</div>
+        <div class="stat-note" id="s3-hit-rate-note"></div>
+      </div>
+      <div class="stat-card" id="s3-db-reduction">
+        <div class="stat-label">Row locks needed</div>
+        <div class="stat-val" id="s3-db-reduction-val">—</div>
+        <div class="stat-note" id="s3-db-reduction-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 4 — CDN Solution
+  ══════════════════════════════════ -->
+  <div class="screen" id="screen-4">
+    <div class="narrator" id="narrator-4"><div class="narrator-icon">🎙</div><div><span id="narrator-text-4"></span><span class="speaking-dots" id="speaking-dots-4" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Fix 2 — Write-Behind Batching <span class="pill blue">Solution</span></div>
+    <div class="screen-sub">Redis holds the hot, exact count. A background worker flushes it to the database on a timer — not on every click.</div>
+
+    <!-- Write-behind diagram -->
+    <div style="margin-bottom:12px">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🪣 Write-behind flow — 50,000 likes → 1 DB write</div>
+      <svg viewBox="0 0 652 155" style="display:block;width:100%" xmlns="http://www.w3.org/2000/svg">
+
+        <!-- Many clients -->
+        <rect x="10" y="14" width="90" height="34" rx="8" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="55" y="35" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#5a6478">50,000 taps ❤️</text>
+        <line x1="100" y1="31" x2="150" y2="55" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+
+        <!-- Redis hot counter -->
+        <rect id="s4-redis" x="150" y="14" width="120" height="70" rx="12" fill="#e6f7f0" stroke="#18a864" stroke-width="1.5"/>
+        <text x="210" y="38" text-anchor="middle" font-size="16">⚛️</text>
+        <text x="210" y="58" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#18a864" font-weight="600">Redis</text>
+        <text id="s4-redis-count" x="210" y="72" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#18a864" opacity="0.85">count: 100</text>
+
+        <!-- Arrow to worker -->
+        <line id="s4-arrow-worker" x1="270" y1="49" x2="330" y2="49" stroke="#dde1ea" stroke-width="1.5" stroke-dasharray="4 2"/>
+        <text x="300" y="41" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#9aa3b5">every 5s</text>
+
+        <!-- Background flusher -->
+        <rect id="s4-worker" x="330" y="14" width="110" height="70" rx="12" fill="#f3f0ff" stroke="#7c3aed" stroke-width="1.5"/>
+        <text x="385" y="38" text-anchor="middle" font-size="16">⏱</text>
+        <text x="385" y="58" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#7c3aed" font-weight="600">Flush worker</text>
+        <text x="385" y="72" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#7c3aed" opacity="0.8">reads delta</text>
+
+        <!-- Arrow to DB -->
+        <line id="s4-arrow-db" x1="440" y1="49" x2="500" y2="49" stroke="#dde1ea" stroke-width="1.5" stroke-dasharray="4 2"/>
+        <text x="470" y="41" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#9aa3b5">1 UPDATE</text>
+
+        <!-- DB -->
+        <rect id="s4-db" x="500" y="14" width="130" height="70" rx="12" fill="#fef3e2" stroke="#d97b10" stroke-width="1.5"/>
+        <text x="565" y="38" text-anchor="middle" font-size="16">🗄</text>
+        <text x="565" y="58" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#d97b10" font-weight="600">Database</text>
+        <text id="s4-db-count" x="565" y="72" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#d97b10" opacity="0.85">like_count</text>
+
+        <!-- Explanation strip -->
+        <rect x="10" y="100" width="620" height="46" rx="10" fill="var(--surface2)" stroke="none"/>
+        <text x="24" y="118" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="var(--muted)">Redis absorbs every increment instantly. The DB only sees a periodic snapshot —</text>
+        <text x="24" y="133" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="var(--muted)">the count can be a few seconds stale, but it is never wrong and never blocks a like.</text>
+      </svg>
+    </div>
+
+    <!-- Batching interval trade-off table -->
+    <div id="s4-table" style="display:none; margin-bottom:12px">
+      <table class="compare-table" id="cdntable">
+        <thead>
+          <tr>
+            <th>Flush interval</th>
+            <th>DB writes/day (viral post)</th>
+            <th>Staleness window</th>
+            <th>Trade-off</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr id="cdnr-img">
+            <td>Every write (naive)</td>
+            <td>~4.3M writes</td>
+            <td>0s (but races)</td>
+            <td>Correctness risk</td>
+          </tr>
+          <tr id="cdnr-vid">
+            <td>Every 5 seconds</td>
+            <td>~17k writes</td>
+            <td>≤5s</td>
+            <td>Sweet spot for likes</td>
+          </tr>
+          <tr id="cdnr-js">
+            <td>Every 60 seconds</td>
+            <td>~1.4k writes</td>
+            <td>≤60s</td>
+            <td>Too stale for live UI</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="verdict success" id="s4-verdict" style="display:none">
+      <div class="verdict-icon">🪣</div>
+      <div>
+        <div class="verdict-title">99.6% fewer database writes</div>
+        <div class="verdict-body">A viral post generating 50,000 likes/minute produces one database write every 5 seconds instead of 50,000. Redis is the source of truth for the live count; the database is a periodically-synced backup. If Redis restarts, worst case you lose a few seconds of increments — acceptable for a like counter, unacceptable for a bank balance.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 5 — Latency numbers
+  ══════════════════════════════════ -->
+  <div class="screen" id="screen-5">
+    <div class="narrator" id="narrator-5"><div class="narrator-icon">🎙</div><div><span id="narrator-text-5"></span><span class="speaking-dots" id="speaking-dots-5" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">The Numbers Every Engineer Must Know <span class="pill amber">Deep Dive</span></div>
+    <div class="screen-sub">Concurrency has a cost curve. Know which strategy fits which contention level.</div>
+
+    <div style="background:var(--surface2);border-radius:12px;padding:14px;margin-bottom:14px" id="latency-table-wrap">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Concurrency strategies — relative cost</div>
+
+      <div class="latency-row" id="lat-l1">
+        <div class="latency-label">Redis INCR (single node)</div>
+        <div class="latency-bar-wrap"><div class="latency-bar bar-fast" id="bar-l1" style="width:0%"></div></div>
+        <div class="latency-val" id="val-l1">~100k ops/s</div>
+      </div>
+      <div class="latency-row" id="lat-ram">
+        <div class="latency-label">Uncontended row UPDATE</div>
+        <div class="latency-bar-wrap"><div class="latency-bar bar-fast" id="bar-ram" style="width:0%"></div></div>
+        <div class="latency-val" id="val-ram">~4 ms</div>
+      </div>
+      <div class="latency-row" id="lat-redis">
+        <div class="latency-label">Optimistic-lock retry (per attempt)</div>
+        <div class="latency-bar-wrap"><div class="latency-bar bar-fast" id="bar-redis" style="width:0%"></div></div>
+        <div class="latency-val" id="val-redis">~2–10 ms</div>
+      </div>
+      <div class="latency-row" id="lat-ssd">
+        <div class="latency-label">Row lock wait, moderate contention</div>
+        <div class="latency-bar-wrap"><div class="latency-bar bar-medium" id="bar-ssd" style="width:0%"></div></div>
+        <div class="latency-val" id="val-ssd">~50 ms</div>
+      </div>
+      <div class="latency-row" id="lat-db">
+        <div class="latency-label">Row lock wait, viral post</div>
+        <div class="latency-bar-wrap"><div class="latency-bar bar-slow" id="bar-db" style="width:0%"></div></div>
+        <div class="latency-val" id="val-db">200–500 ms</div>
+      </div>
+      <div class="latency-row" id="lat-cdn">
+        <div class="latency-label">Lost-update rate, naive R-M-W @ 2 writers</div>
+        <div class="latency-bar-wrap"><div class="latency-bar bar-slow" id="bar-cdn" style="width:0%"></div></div>
+        <div class="latency-val" id="val-cdn">~30–50%</div>
+      </div>
+      <div class="latency-row" id="lat-dc">
+        <div class="latency-label">Lost-update rate, atomic INCR</div>
+        <div class="latency-bar-wrap"><div class="latency-bar bar-fast" id="bar-dc" style="width:0%"></div></div>
+        <div class="latency-val" id="val-dc">0%</div>
+      </div>
+      <div class="latency-row" id="lat-xus">
+        <div class="latency-label">DB write reduction, 5s batching</div>
+        <div class="latency-bar-wrap"><div class="latency-bar bar-fast" id="bar-xus" style="width:0%"></div></div>
+        <div class="latency-val" id="val-xus">99.6%</div>
+      </div>
+      <div class="latency-row" id="lat-tokyo">
+        <div class="latency-label">Optimistic-lock abort rate, hot key</div>
+        <div class="latency-bar-wrap"><div class="latency-bar bar-slow" id="bar-tokyo" style="width:0%"></div></div>
+        <div class="latency-val" id="val-tokyo">up to 40%</div>
+      </div>
+    </div>
+
+    <div class="verdict info" id="s5-verdict" style="display:none">
+      <div class="verdict-icon">🧠</div>
+      <div>
+        <div class="verdict-title">The key insight: match the tool to the contention</div>
+        <div class="verdict-body">Row locks are correct but serialize a hot row into a queue — fine at low contention, catastrophic on a viral post. Optimistic locking retries under contention and can thrash. Atomic operations sidestep the problem entirely: there is no lock to wait for and no version to conflict, because there was never a gap to race in.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 6 — Summary
+  ══════════════════════════════════ -->
+  <div class="screen" id="screen-6">
+    <div class="narrator" id="narrator-6"><div class="narrator-icon">🎙</div><div><span id="narrator-text-6"></span><span class="speaking-dots" id="speaking-dots-6" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Key Takeaways</div>
+    <div class="screen-sub">What every engineer must know about counters and concurrency.</div>
+
+    <div class="concepts-grid">
+      <div class="concept-card">
+        <div class="concept-icon">🫥</div>
+        <div class="concept-title">Race Condition</div>
+        <div class="concept-body">Read-modify-write has a gap between reading a value and writing it back. Two concurrent writers can both read the same value and one update silently disappears.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">⚛️</div>
+        <div class="concept-title">Atomic Operations</div>
+        <div class="concept-body">INCR, compare-and-swap, and other single-instruction ops leave no gap to race in. This is almost always cheaper and simpler than adding a lock.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">🌊</div>
+        <div class="concept-title">Thundering Herd</div>
+        <div class="concept-body">A viral post turns one database row into a bottleneck as thousands of requests queue for the same lock at once. Design for the spike, not the average.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">🪣</div>
+        <div class="concept-title">Eventual Consistency</div>
+        <div class="concept-body">Write-behind batching lets an in-memory counter absorb load and flush to durable storage on a timer. Perfect for approximate counters — wrong for anything that must never be stale.</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="verdict success">
+      <div class="verdict-icon">💡</div>
+      <div>
+        <div class="verdict-title">The rule of thumb</div>
+        <div class="verdict-body">Don't reach for a lock first. Ask whether the operation can be made atomic, and whether the read path can tolerate staleness. A like counter needs neither strict serialization nor real-time accuracy — which is exactly why an atomic Redis counter with a periodic flush beats a row lock at every scale that matters.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Footer nav ── -->
+  <div class="footer">
+    <div class="footer-left">
+      <button class="btn ghost" id="btn-prev" onclick="prevScreen()" disabled>← Back</button>
+      <button class="btn blue"  id="btn-next" onclick="nextScreen()">Next →</button>
+    </div>
+    <div class="footer-right">
+      <button class="btn amber" id="btn-auto" onclick="runAuto()">▶ Auto demo</button>
+      <button class="btn ghost" id="btn-pause" onclick="togglePause()" style="display:none">⏸ Pause</button>
+      <button class="btn ghost" id="btn-restart" onclick="restart()">↺ Restart</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════
+// AUDIO ENGINE
+// ═══════════════════════════════
+let audioEnabled = true;
+let audioCtx = null;
+
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function toggleAudio() {
+  audioEnabled = !audioEnabled;
+  const ctrl  = document.getElementById('audio-ctrl');
+  const label = document.getElementById('audio-label');
+  ctrl.className  = 'audio-ctrl' + (audioEnabled ? ' on' : '');
+  label.textContent = audioEnabled ? 'Audio on' : 'Audio off';
+  if (!audioEnabled) { window.speechSynthesis.cancel(); }
+  else {
+    try { getCtx().resume(); } catch(e) {}
+    speak("Audio enabled.", 0, null);
+  }
+}
+
+let _cancelToken  = 0;
+let _charOffset   = 0;
+let _pausedText   = '';
+let _pausedIdx    = 0;
+let _pausedOnEnd  = null;
+let _pausedResolve = null;
+
+function _getVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  return voices.find(v => v.lang.startsWith('en') && (
+    v.name.includes('Google') || v.name.includes('Samantha') ||
+    v.name.includes('Daniel') || v.name.includes('Alex')
+  )) || voices.find(v => v.lang.startsWith('en'));
+}
+
+function _showNarrator(screenIdx, text) {
+  const ntxt    = document.getElementById('narrator-text'  + (screenIdx > 0 ? '-'+screenIdx : ''));
+  const ndots   = document.getElementById('speaking-dots'  + (screenIdx > 0 ? '-'+screenIdx : ''));
+  const nbubble = document.getElementById('narrator'       + (screenIdx > 0 ? '-'+screenIdx : ''));
+  if (ntxt)    ntxt.textContent = text;
+  if (ndots)   ndots.style.display = 'inline';
+  if (nbubble) nbubble.classList.add('visible');
+}
+
+function _hideNarrator(screenIdx) {
+  const ndots   = document.getElementById('speaking-dots' + (screenIdx > 0 ? '-'+screenIdx : ''));
+  const nbubble = document.getElementById('narrator'      + (screenIdx > 0 ? '-'+screenIdx : ''));
+  if (ndots)   ndots.style.display = 'none';
+  if (nbubble) nbubble.classList.remove('visible');
+}
+
+function _doSpeak(text, startChar, screenIdx, onEnd, token) {
+  window.speechSynthesis.cancel();
+  const remaining = text.slice(startChar);
+  if (!remaining.trim()) { if (onEnd) onEnd(); return; }
+  _showNarrator(screenIdx, text);
+  const utter = new SpeechSynthesisUtterance(remaining);
+  utter.rate  = 0.95;
+  utter.pitch = 1.0;
+  const v = _getVoice();
+  if (v) utter.voice = v;
+  utter.onboundary = (e) => {
+    if (_cancelToken !== token) return;
+    if (e.name === 'word') _charOffset = startChar + (e.charIndex || 0);
+  };
+  utter.onend = () => {
+    if (_cancelToken !== token) return;
+    _hideNarrator(screenIdx);
+    _pausedText = ''; _charOffset = 0; _pausedOnEnd = null;
+    if (onEnd) onEnd();
+  };
+  utter.onerror = (e) => {
+    if (_cancelToken !== token) return;
+    if (e.error === 'interrupted' || e.error === 'canceled') return;
+    _hideNarrator(screenIdx);
+    if (onEnd) onEnd();
+  };
+  window.speechSynthesis.speak(utter);
+}
+
+function speak(text, screenIdx, onEnd) {
+  if (!audioEnabled) { if (onEnd) onEnd(); return; }
+  _cancelToken++;
+  const myToken = _cancelToken;
+  _charOffset  = 0;
+  _pausedText  = text;
+  _pausedIdx   = screenIdx;
+  _pausedOnEnd = onEnd;
+  _doSpeak(text, 0, screenIdx, onEnd, myToken);
+}
+
+function speakWait(text, screenIdx) {
+  return new Promise(resolve => speak(text, screenIdx, resolve));
+}
+
+function tone(freq, type, dur, vol=0.12) {
+  if (!audioEnabled) return;
+  try {
+    const ctx = getCtx(), osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.connect(g); g.connect(ctx.destination);
+    osc.type = type; osc.frequency.value = freq;
+    g.gain.setValueAtTime(vol, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.start(); osc.stop(ctx.currentTime + dur);
+  } catch(e) {}
+}
+const sfx = {
+  click:   () => tone(700, 'sine', 0.07, 0.08),
+  data:    () => tone(1100, 'square', 0.04, 0.05),
+  success: () => [523,659,784,1047].forEach((f,i) => setTimeout(() => tone(f,'sine',.18,.11), i*80)),
+  warn:    () => [440,370,311].forEach((f,i) => setTimeout(() => tone(f,'sawtooth',.15,.10), i*100)),
+  error:   () => [190,160].forEach((f,i) => setTimeout(() => tone(f,'sawtooth',.25,.14), i*120)),
+  pop:     () => tone(900, 'sine', 0.06, 0.09),
+  chord:   () => [261,329,392,523].forEach((f,i) => setTimeout(() => tone(f,'sine',.28,.09), i*55)),
+  ping:    () => tone(1400, 'sine', 0.08, 0.07),
+};
+
+// ═══════════════════════════════
+// SCREEN ENGINE
+// ═══════════════════════════════
+let currentScreen = 0;
+const TOTAL = 7;
+let busy = false;
+let paused = false;
+let pauseResolve = null;
+
+function delay(ms) {
+  return new Promise(resolve => {
+    const start = Date.now();
+    function tick() {
+      if (paused) { setTimeout(tick, 100); return; }
+      const elapsed = Date.now() - start;
+      if (elapsed >= ms) resolve();
+      else setTimeout(tick, Math.min(100, ms - elapsed));
+    }
+    tick();
+  });
+}
+
+function updateHeader(idx) {
+  const h1  = document.getElementById('header-title');
+  const sub = document.getElementById('header-sub');
+  const mod = document.getElementById('module-num');
+  if (!h1 || !sub || !mod) return;
+  const isIntro = idx === 0;
+  const title    = isIntro
+    ? 'Architecture Thinking <span style="color:var(--blue)">for AI-Assisted Development</span>'
+    : 'The &quot;Like&quot; Counter &amp; Concurrency';
+  const subtitle = isIntro
+    ? 'Learn how real systems stay correct under load — and how to work smarter with AI.'
+    : 'From a single UPDATE statement to a viral post with 50,000 concurrent likes.';
+  if (h1.dataset.screen === String(idx)) return;
+  h1.dataset.screen = String(idx);
+  h1.classList.add('fading');
+  sub.classList.add('fading');
+  mod.classList.add('fading');
+  setTimeout(() => {
+    h1.innerHTML     = title;
+    sub.textContent  = subtitle;
+    mod.textContent  = 'Chapter 07';
+    h1.classList.remove('fading');
+    sub.classList.remove('fading');
+    mod.classList.remove('fading');
+  }, 550);
+}
+
+function showScreen(idx) {
+  document.querySelectorAll('.screen').forEach((s, i) => {
+    s.classList.toggle('active', i === idx);
+  });
+  for (let i = 0; i < TOTAL; i++) {
+    const p = document.getElementById('prog-' + i);
+    if (!p) continue;
+    p.className = 'prog-step' + (i < idx ? ' done' : i === idx ? ' active' : '');
+  }
+  // Mark screen-2 (breaking) as warn after passing it
+  if (idx > 2) {
+    const p2 = document.getElementById('prog-2');
+    if (p2) p2.className = 'prog-step warn done';
+  }
+  currentScreen = idx;
+  updateHeader(idx);
+  document.getElementById('btn-prev').disabled = idx === 0;
+  document.getElementById('btn-next').style.display = idx === TOTAL - 1 ? 'none' : 'flex';
+}
+
+function showPauseBtn(show) {
+  const btn = document.getElementById('btn-pause');
+  if (!btn) return;
+  btn.style.display = show ? 'flex' : 'none';
+  if (!show) {
+    paused = false;
+    btn.textContent = '⏸ Pause';
+    btn.classList.remove('blue');
+    btn.classList.add('ghost');
+  }
+}
+
+function togglePause() {
+  const btn = document.getElementById('btn-pause');
+  paused = !paused;
+  if (paused) {
+    window.speechSynthesis.cancel();
+    btn.textContent = '▶ Resume';
+    btn.classList.add('blue');
+    btn.classList.remove('ghost');
+  } else {
+    btn.textContent = '⏸ Pause';
+    btn.classList.remove('blue');
+    btn.classList.add('ghost');
+    if (_pausedText) {
+      const resumeFrom = _charOffset;
+      const resumeText = _pausedText;
+      const resumeIdx  = _pausedIdx;
+      const resumeEnd  = _pausedOnEnd;
+      const myToken    = _cancelToken;
+      _doSpeak(resumeText, resumeFrom, resumeIdx, resumeEnd, myToken);
+    }
+    if (pauseResolve) { pauseResolve(); pauseResolve = null; }
+  }
+}
+
+// ═══════════════════════════════
+// SCREEN 0 — Intro animation
+// ═══════════════════════════════
+async function animateScreen0() {
+  document.querySelectorAll('.intro-card').forEach(c => c.classList.remove('animating'));
+  const inspEl = document.querySelector('.intro-inspiration');
+  if (inspEl) inspEl.classList.remove('animating');
+
+  await speakWait("Welcome back to Engineering Refresh. In this chapter we tackle concurrency — what happens when thousands of people try to update the same number at the same instant?", 0);
+  await delay(600);
+
+  const cards = document.querySelectorAll('.intro-card');
+  for (let i = 0; i < cards.length; i++) {
+    sfx.data();
+    cards[i].classList.add('animating');
+    await delay(1400);
+  }
+
+  await delay(400);
+  if (inspEl) inspEl.classList.add('animating');
+  sfx.pop();
+  await delay(800);
+
+  await speakWait("A like counter looks trivial. Read the count, add one, write it back. That works fine for one user. It quietly breaks the moment two users do it in the same millisecond.", 0);
+  await delay(400);
+}
+
+// ═══════════════════════════════
+// SCREEN 1 — Simple state
+// ═══════════════════════════════
+async function animateScreen1Full() {
+  await animateScreen1Intro();
+  await animateScreen1();
+}
+
+async function animateScreen1Intro() {
+  await speakWait("Let's start with the Like Counter and Concurrency.", 1);
+  await delay(700);
+  await speakWait("The central question: how do you safely increment a shared number when many people can act on it at once? We begin where every system does — one request at a time.", 1);
+  await delay(700);
+  await speakWait("At 30 likes a minute this is completely fine. But understanding why it works helps us understand exactly why it breaks.", 1);
+  await delay(900);
+}
+
+async function animateScreen1() {
+  await speakWait("With low traffic, each tap goes to the API, which reads the current like count, adds one, and writes it back. There's a small gap between the read and the write, but nobody else touches the row in that gap, so it's invisible.", 1);
+
+  sfx.data();
+  document.getElementById('n1-client').style.fill = '#e8f2fd';
+  document.getElementById('n1-client').style.stroke = '#1a7fe8';
+  await delay(900);
+  sfx.data();
+  document.getElementById('n1-api').style.fill = '#e8f2fd';
+  document.getElementById('n1-api').style.stroke = '#1a7fe8';
+  await delay(900);
+  sfx.data();
+  document.getElementById('n1-db').style.fill = '#e6f7f0';
+  document.getElementById('n1-db').style.stroke = '#18a864';
+  await delay(800);
+
+  // Reveal response label
+  document.getElementById('s1-resp-label').style.opacity = '1';
+
+  sfx.data();
+  document.getElementById('s1-rtt').className = 'stat-card good';
+  document.getElementById('s1-rtt-val').textContent  = '~4 ms';
+  document.getElementById('s1-rtt-note').textContent = '✓ Fast, sequential, no contention';
+  await delay(1100);
+
+  sfx.data();
+  document.getElementById('s1-db').className = 'stat-card good';
+  document.getElementById('s1-db-val').textContent  = '0';
+  document.getElementById('s1-db-note').textContent = '✓ No two writers ever overlap';
+  await delay(900);
+
+  sfx.success();
+}
+
+// ═══════════════════════════════
+// SCREEN 2 — Breaking point
+// ═══════════════════════════════
+async function animateScreen2() {
+  await speakWait("Now a post goes viral. Fifty thousand people like it in the same minute. The same read-modify-write code is now hit by thousands of concurrent requests on one row.", 2);
+  sfx.warn();
+  await delay(1000);
+
+  const steps = ['a-read','b-read','a-add','b-add','a-write','b-write'];
+  for (const id of steps) {
+    sfx.data();
+    const el = document.getElementById(id);
+    if (el) el.className = 'race-step active';
+    await delay(650);
+  }
+
+  await delay(300);
+  document.getElementById('a-write').className = 'race-step bad';
+  document.getElementById('b-write').className = 'race-step bad';
+  sfx.error();
+  document.getElementById('race-result').style.display = 'block';
+  document.getElementById('race-result').style.animation = 'fadeIn .6s ease';
+  await delay(900);
+
+  const cards = [
+    { id: 's2-rtt',  val: '210 ms',  note: '✗ Requests queue behind row locks' },
+    { id: 's2-db',   val: '~35%',    note: '✗ More than 1 in 3 likes vanish' },
+    { id: 's2-img',  val: '400+ ms', note: '✗ Threads block waiting for the same row' },
+    { id: 's2-hit',  val: '98%',     note: '✗ Single row pegs one CPU core' },
+  ];
+
+  for (const c of cards) {
+    sfx.error();
+    document.getElementById(c.id).className = 'stat-card bad';
+    document.getElementById(c.id + '-val').textContent  = c.val;
+    document.getElementById(c.id + '-note').textContent = c.note;
+    await delay(1000);
+  }
+
+  await speakWait("Both threads read 100 before either writes. Both compute 101. Both write 101. One entire like vanished, and neither request ever errored — this is why lost updates are so dangerous. Nothing tells you it happened.", 2);
+}
+
+// ═══════════════════════════════
+// SCREEN 3 — Redis Cache
+// ═══════════════════════════════
+async function animateScreen3() {
+  await speakWait("The fix is an atomic increment. Redis's INCR command reads and writes as a single, indivisible operation — there is no gap in the middle for another request to sneak into.", 3);
+  await delay(800);
+
+  sfx.data();
+  document.getElementById('n3-redis').style.animation = 'nodeFlash .5s ease';
+  await delay(700);
+
+  document.getElementById('s3-step-a').style.opacity = '1';
+  sfx.click();
+  await delay(700);
+  document.getElementById('s3-step-b').style.opacity = '1';
+  sfx.click();
+  await delay(700);
+
+  await speakWait("Redis processes commands on a single thread. Thread A's INCR fully completes — 100 becomes 101 — before Thread B's INCR even starts. There is no interleaving possible.", 3);
+  await delay(700);
+
+  sfx.chord();
+  await delay(600);
+
+  // Reveal stats
+  const s3items = [
+    { id: 's3-hit-time',     val: '0%',        note: '✓ Structurally impossible to lose an update', cls: 'good' },
+    { id: 's3-miss-time',    val: '~1 ms',      note: '✓ In-memory, no disk, no lock wait', cls: 'good' },
+    { id: 's3-hit-rate',     val: '~100k/s',    note: '✓ Single Redis node, single core', cls: 'good' },
+    { id: 's3-db-reduction', val: '0',          note: '✓ No row lock ever taken', cls: 'good' },
+  ];
+  for (const item of s3items) {
+    sfx.data();
+    document.getElementById(item.id).className = 'stat-card ' + item.cls;
+    document.getElementById(item.id + '-val').textContent  = item.val;
+    document.getElementById(item.id + '-note').textContent = item.note;
+    await delay(1000);
+  }
+
+  sfx.success();
+  await speakWait("Zero lost updates, at any concurrency level. This isn't a bigger lock — it's removing the need for a lock entirely.", 3);
+}
+
+// ═══════════════════════════════
+// SCREEN 4 — CDN
+// ═══════════════════════════════
+async function animateScreen4() {
+  await speakWait("The second fix addresses durability without sacrificing throughput. Redis holds the live, exact count. A background worker flushes the accumulated delta to the database on a timer.", 4);
+  await delay(800);
+
+  sfx.data();
+  document.getElementById('s4-redis').style.animation = 'nodeFlash .5s ease';
+  document.getElementById('s4-redis-count').textContent = 'count: 50,000';
+  await delay(900);
+
+  sfx.click();
+  document.getElementById('s4-worker').style.animation = 'nodeFlash .5s ease';
+  await delay(700);
+
+  sfx.data();
+  document.getElementById('s4-db').style.animation = 'nodeFlash .5s ease';
+  document.getElementById('s4-db-count').textContent = 'synced ✓';
+  await delay(800);
+
+  await speakWait("Every like still hits Redis instantly, so the user sees the count update in real time. The database only receives a periodic write — every 5 seconds, say — no matter how many likes happened in between.", 4);
+  await delay(800);
+
+  // Reveal comparison table
+  document.getElementById('s4-table').style.display = 'block';
+  document.getElementById('s4-table').style.animation = 'fadeIn .9s cubic-bezier(0.22,0.61,0.36,1)';
+  const rows = ['cdnr-img', 'cdnr-vid', 'cdnr-js'];
+  const rowClasses = ['bad-row', 'good-row', 'highlight-row'];
+  for (let i = 0; i < rows.length; i++) {
+    sfx.data();
+    document.getElementById(rows[i]).className = rowClasses[i];
+    await delay(900);
+    document.getElementById(rows[i]).className = '';
+  }
+
+  await delay(400);
+  document.getElementById('s4-verdict').style.display = 'flex';
+  document.getElementById('s4-verdict').style.animation = 'fadeIn .9s cubic-bezier(0.22,0.61,0.36,1)';
+  sfx.chord();
+  await delay(600);
+
+  await speakWait("A five second flush window turns fifty thousand writes into roughly ten. If Redis crashes between flushes, you lose a handful of seconds of likes — a rounding error nobody will ever notice on a social count.", 4);
+}
+
+// ═══════════════════════════════
+// SCREEN 5 — Latency numbers
+// ═══════════════════════════════
+async function animateScreen5() {
+  await speakWait("Now let's look at the numbers that should drive your choice of concurrency strategy. These are the trade-offs between locks, optimistic retries, and atomic operations.", 5);
+  await delay(700);
+
+  const items = [
+    { bar: 'bar-l1',    pct: 92, delay: 700  },
+    { bar: 'bar-ram',   pct: 30, delay: 700  },
+    { bar: 'bar-redis', pct: 22, delay: 700  },
+    { bar: 'bar-ssd',   pct: 45, delay: 700  },
+    { bar: 'bar-db',    pct: 85, delay: 700  },
+    { bar: 'bar-cdn',   pct: 75, delay: 700  },
+    { bar: 'bar-dc',    pct: 3,  delay: 700  },
+    { bar: 'bar-xus',   pct: 96, delay: 800  },
+    { bar: 'bar-tokyo', pct: 65, delay: 1000 },
+  ];
+
+  for (const item of items) {
+    sfx.data();
+    const barEl = document.getElementById(item.bar);
+    if (barEl) barEl.style.width = item.pct + '%';
+    await delay(item.delay);
+  }
+
+  await delay(500);
+  document.getElementById('s5-verdict').style.display = 'flex';
+  document.getElementById('s5-verdict').style.animation = 'fadeIn .9s cubic-bezier(0.22,0.61,0.36,1)';
+  sfx.chord();
+  await delay(600);
+
+  await speakWait("A viral row can push lock waits past half a second, and optimistic retries can abort up to 40% of the time under the same contention. Atomic operations sidestep both failure modes at once.", 5);
+}
+
+// ═══════════════════════════════
+// SCREEN 6 — Summary
+// ═══════════════════════════════
+async function animateScreen6() {
+  await speakWait("The core lesson: don't reach for a bigger lock. Ask whether the operation can be made atomic, and whether the read path can tolerate a few seconds of staleness. For a like counter, the answer to both is yes — and that's exactly why it scales.", 6);
+  await delay(600);
+  sfx.success();
+}
+
+// ═══════════════════════════════
+// SCREEN ANIMATIONS ARRAY
+// ═══════════════════════════════
+const screenAnimations = [
+  animateScreen0,
+  animateScreen1Full,
+  animateScreen2,
+  animateScreen3,
+  animateScreen4,
+  animateScreen5,
+  animateScreen6,
+];
+
+// ═══════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════
+async function goToScreen(idx, animate=true) {
+  if (busy) return;
+  busy = true;
+  _cancelToken++;
+  window.speechSynthesis.cancel();
+  _pausedText = '';
+  paused = false;
+  showScreen(idx);
+  showPauseBtn(true);
+  if (animate) await screenAnimations[idx]();
+  showPauseBtn(false);
+  busy = false;
+}
+
+// Cinematic transition: intro → screen 1
+async function beginModule() {
+  if (busy) return;
+  busy = true;
+  paused = false;
+  sfx.click();
+  showPauseBtn(true);
+
+  const introScreen  = document.getElementById('screen-0');
+  const nextScreenEl = document.getElementById('screen-1');
+  const overlay      = document.getElementById('cinematic-overlay');
+
+  introScreen.classList.add('sliding-out');
+  await delay(680);
+
+  introScreen.classList.remove('sliding-out');
+  introScreen.classList.remove('active');
+  overlay.classList.add('fade-in');
+  await delay(700);
+
+  nextScreenEl.classList.add('active');
+  currentScreen = 1;
+  updateHeader(1);
+  document.getElementById('btn-prev').disabled = false;
+  document.getElementById('prog-0').className = 'prog-step done';
+  document.getElementById('prog-1').className = 'prog-step active';
+
+  overlay.classList.remove('fade-in');
+  overlay.classList.add('fade-out');
+  nextScreenEl.classList.add('slide-in');
+  await delay(800);
+  nextScreenEl.classList.remove('slide-in');
+  overlay.classList.remove('fade-out');
+
+  window.speechSynthesis.cancel();
+  await animateScreen1Intro();
+  await animateScreen1();
+  showPauseBtn(false);
+  busy = false;
+}
+
+async function nextScreen() {
+  if (currentScreen < TOTAL - 1) {
+    _cancelToken++;
+    window.speechSynthesis.cancel();
+    _pausedText = '';
+    busy = false;
+    paused = false;
+    showPauseBtn(false);
+    sfx.click();
+    await goToScreen(currentScreen + 1);
+  }
+}
+
+async function prevScreen() {
+  if (currentScreen > 0) {
+    _cancelToken++;
+    window.speechSynthesis.cancel();
+    _pausedText = '';
+    busy = false;
+    paused = false;
+    showPauseBtn(false);
+    sfx.click();
+    resetStats();
+    await goToScreen(currentScreen - 1, true);
+  }
+}
+
+function restart() {
+  _cancelToken++;
+  window.speechSynthesis.cancel();
+  _pausedText = '';
+  busy = false;
+  paused = false;
+  showPauseBtn(false);
+  sfx.click();
+  resetStats();
+
+  document.querySelectorAll('.intro-card').forEach(c => c.classList.remove('animating'));
+  const insp = document.querySelector('.intro-inspiration');
+  if (insp) insp.classList.remove('animating');
+
+  // Reset SVG node colours
+  ['n1-client','n1-api','n1-db'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.style.fill = '#f5f7fa'; el.style.stroke = '#dde1ea'; }
+  });
+  const respLabel = document.getElementById('s1-resp-label');
+  if (respLabel) respLabel.style.opacity = '0';
+
+  showScreen(0);
+  updateHeader(0);
+  document.getElementById('btn-prev').disabled = true;
+  document.getElementById('btn-next').style.display = 'flex';
+}
+
+function resetStats() {
+  // Screen 1
+  ['s1-rtt','s1-db'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'stat-card';
+    const v = document.getElementById(id+'-val');
+    const n = document.getElementById(id+'-note');
+    if (v) v.textContent = '—';
+    if (n) n.textContent = '';
+  });
+  const respLabel = document.getElementById('s1-resp-label');
+  if (respLabel) respLabel.style.opacity = '0';
+
+  // Reset SVG node colours on screen 1
+  ['n1-client','n1-api','n1-db'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.style.fill = '#f5f7fa'; el.style.stroke = '#dde1ea'; }
+  });
+
+  // Screen 2
+  ['s2-rtt','s2-db','s2-img','s2-hit'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'stat-card';
+    const v = document.getElementById(id+'-val');
+    const n = document.getElementById(id+'-note');
+    if (v) v.textContent = '—';
+    if (n) n.textContent = '';
+  });
+  ['a-read','a-add','a-write','b-read','b-add','b-write'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'race-step';
+  });
+  const raceResult = document.getElementById('race-result');
+  if (raceResult) raceResult.style.display = 'none';
+
+  // Screen 3
+  ['s3-hit-time','s3-miss-time','s3-hit-rate','s3-db-reduction'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'stat-card';
+    const v = document.getElementById(id+'-val');
+    const n = document.getElementById(id+'-note');
+    if (v) v.textContent = '—';
+    if (n) n.textContent = '';
+  });
+  const s3a = document.getElementById('s3-step-a');
+  const s3b = document.getElementById('s3-step-b');
+  if (s3a) s3a.style.opacity = '0';
+  if (s3b) s3b.style.opacity = '0';
+
+  // Screen 4
+  const s4table   = document.getElementById('s4-table');
+  const s4verdict = document.getElementById('s4-verdict');
+  if (s4table)   s4table.style.display   = 'none';
+  if (s4verdict) s4verdict.style.display = 'none';
+  ['cdnr-img','cdnr-vid','cdnr-js'].forEach(id => {
+    const r = document.getElementById(id);
+    if (r) r.className = '';
+  });
+  const s4rc = document.getElementById('s4-redis-count');
+  const s4dc = document.getElementById('s4-db-count');
+  if (s4rc) s4rc.textContent = 'count: 100';
+  if (s4dc) s4dc.textContent = 'like_count';
+
+  // Screen 5
+  const bars = ['bar-l1','bar-ram','bar-redis','bar-ssd','bar-db','bar-cdn','bar-dc','bar-xus','bar-tokyo'];
+  bars.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.width = '0%';
+  });
+  const s5verdict = document.getElementById('s5-verdict');
+  if (s5verdict) s5verdict.style.display = 'none';
+}
+
+async function runAuto() {
+  if (busy) return;
+  sfx.click();
+  resetStats();
+  document.querySelectorAll('.intro-card').forEach(c => c.classList.remove('animating'));
+
+  await goToScreen(0);
+  await delay(1800);
+  await beginModule();
+  await delay(1800);
+  for (let i = 2; i < TOTAL; i++) {
+    await goToScreen(i);
+    await delay(1800);
+  }
+}
+
+// Init voices
+if (window.speechSynthesis) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+}
+
+// Init
+showScreen(0);
+</script>
+</body>
+</html>
