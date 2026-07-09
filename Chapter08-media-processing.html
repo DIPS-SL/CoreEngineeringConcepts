@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Media pipeline — sketch walkthrough</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FFFCF5;
+  --rule:rgba(60,60,90,.08);
+  --margin:rgba(255,110,110,.35);
+  --ink:#2b2b2b;
+  --ink-soft:#6b6b6b;
+  --c-neutral-fill:#e9ecef;  --c-neutral-stroke:#495057;
+  --c-storage-fill:#a5d8ff;  --c-storage-stroke:#1971c2;
+  --c-compute-fill:#ffec99;  --c-compute-stroke:#f08c00;
+  --c-delivery-fill:#b2f2bb; --c-delivery-stroke:#2f9e44;
+  --packet:#fd7e14; --packet-stroke:#d9480f;
+  --highlight:#ffe066;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0; min-height:100vh; padding:32px 20px; display:flex; justify-content:center;
+  background-color:var(--paper);
+  background-image:
+    linear-gradient(to right, transparent 55px, var(--margin) 55px, var(--margin) 57px, transparent 57px),
+    repeating-linear-gradient(to bottom, transparent 0 30px, var(--rule) 30px 31px);
+  color:var(--ink); font-family:'Inter',sans-serif;
+}
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+.wrap{width:100%;max-width:1080px;}
+.title{font-family:'Kalam',cursive;font-weight:700;font-size:30px;margin:0;}
+.underline{display:block;margin:-2px 0 6px;}
+.intro{font-family:'Kalam',cursive;font-size:16px;color:var(--ink-soft);margin:0 0 16px;}
+.tabs{display:flex;gap:10px;margin-bottom:18px;}
+.tab-btn{font-family:'Kalam',cursive;font-weight:700;font-size:14px;color:var(--ink-soft);background:transparent;border:2px solid transparent;border-radius:10px 6px 12px 8px;padding:7px 16px;cursor:pointer;}
+.tab-btn:hover{color:var(--ink);}
+.tab-btn.tab-active{color:var(--ink);background:#fffaf0;border-color:var(--ink);box-shadow:2px 2px 0 rgba(0,0,0,.1);}
+.scene{display:none;}
+.scene.active{display:block;}
+.scene-note{font-size:14px;color:var(--ink-soft);margin:0 0 12px;}
+.svg-wrap{overflow-x:auto;}
+svg.diagram{display:block;width:100%;min-width:820px;height:auto;}
+.node-title{font-family:'Kalam',cursive;font-size:16px;font-weight:700;fill:var(--ink);}
+.node-sub{font-family:'Inter',sans-serif;font-size:11.5px;fill:var(--ink-soft);}
+.node-service{font-family:'Inter',sans-serif;font-weight:600;font-size:11.5px;fill:var(--packet-stroke);}
+.connector{stroke:#b8bcc4;stroke-width:2.5;fill:none;transition:stroke .5s, stroke-width .5s;}
+.connector.lit{stroke:var(--packet);stroke-width:3;}
+.node-box{stroke-width:2.5;transition:stroke-width .3s;}
+.halo{opacity:0;fill:var(--highlight);transition:opacity .35s;}
+.node.active .halo{opacity:.85;}
+.node.active .node-box{stroke-width:3.5;}
+.c-neutral .node-box{fill:var(--c-neutral-fill);stroke:var(--c-neutral-stroke);}
+.c-storage .node-box{fill:var(--c-storage-fill);stroke:var(--c-storage-stroke);}
+.c-compute .node-box{fill:var(--c-compute-fill);stroke:var(--c-compute-stroke);}
+.c-delivery .node-box{fill:var(--c-delivery-fill);stroke:var(--c-delivery-stroke);}
+.packet{fill:var(--packet);stroke:var(--packet-stroke);stroke-width:2.5;filter:drop-shadow(1px 3px 0 rgba(0,0,0,.18));transition:transform .8s cubic-bezier(.4,0,.2,1);}
+.caption-card{background:#fffaf0;border:2.5px solid var(--ink);border-radius:16px 8px 18px 10px;padding:16px 20px;margin-top:22px;transform:rotate(-.3deg);box-shadow:3px 3px 0 rgba(0,0,0,.08);}
+.stage-label{font-family:'Kalam',cursive;font-weight:700;font-size:13px;color:var(--packet-stroke);}
+.caption-text{margin:6px 0 0;font-size:16px;line-height:1.55;color:var(--ink);}
+.progress-track{height:9px;border:1.5px solid var(--ink);background:#efe9db;border-radius:20px;margin-top:14px;overflow:hidden;}
+.progress-fill{height:100%;width:0%;background:var(--packet);transition:width .6s ease;}
+.controls{display:flex;align-items:center;gap:12px;margin-top:18px;flex-wrap:wrap;}
+button{font-family:'Kalam',cursive;font-weight:700;font-size:15px;color:var(--ink);background:#fffaf0;border:2.5px solid var(--ink);border-radius:10px 6px 12px 8px;padding:8px 20px;cursor:pointer;box-shadow:2px 2px 0 rgba(0,0,0,.12);transition:transform .15s, background .2s;}
+button:hover{background:var(--highlight);}
+button:active{transform:translateY(2px);box-shadow:0 0 0 rgba(0,0,0,.12);}
+button:focus-visible{outline:2px solid var(--packet-stroke);outline-offset:2px;}
+select{font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:#fffaf0;border:2px solid var(--ink);border-radius:8px;padding:7px 10px;max-width:220px;}
+.check-label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-soft);margin-left:auto;font-family:'Inter',sans-serif;}
+@media (prefers-reduced-motion: reduce){
+  .packet{transition:transform .05s linear;}
+  .connector,.node-box,.halo,.progress-fill{transition-duration:.05s;}
+}
+</style>
+</head>
+<body>
+
+<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+<defs>
+  <filter id="sketchy" x="-20%" y="-20%" width="140%" height="140%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.045 0.06" numOctaves="2" seed="7" result="noise"/>
+    <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.2"/>
+  </filter>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#343a40" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+
+  <symbol id="icon-upload" viewBox="0 0 24 24">
+    <path d="M12 4 L12 15 M7 9 L12 4 L17 9" fill="none" stroke="#2b2b2b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M4 17 L4 20 L20 20 L20 17" fill="none" stroke="#2b2b2b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="icon-bucket" viewBox="0 0 24 24">
+    <path d="M3 6 Q12 2 21 6" fill="none" stroke="#2b2b2b" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M4 6 L7 21 L17 21 L20 6" fill="none" stroke="#2b2b2b" stroke-width="1.8" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="icon-bell" viewBox="0 0 24 24">
+    <path d="M12 3 C9.2 3 8 6 8 9 C8 13 6 14 6 16 L18 16 C18 14 16 13 16 9 C16 6 14.8 3 12 3 Z" fill="none" stroke="#2b2b2b" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M10 18.5 Q12 21 14 18.5" fill="none" stroke="#2b2b2b" stroke-width="1.8" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="icon-queue" viewBox="0 0 24 24">
+    <rect x="4" y="4.5" width="16" height="4" rx="1.8" fill="none" stroke="#2b2b2b" stroke-width="1.6"/>
+    <rect x="4" y="10" width="16" height="4" rx="1.8" fill="none" stroke="#2b2b2b" stroke-width="1.6"/>
+    <rect x="4" y="15.5" width="16" height="4" rx="1.8" fill="none" stroke="#2b2b2b" stroke-width="1.6"/>
+  </symbol>
+  <symbol id="icon-chip" viewBox="0 0 24 24">
+    <rect x="6" y="6" width="12" height="12" rx="2" fill="none" stroke="#2b2b2b" stroke-width="1.8"/>
+    <path d="M9 6V3M15 6V3M9 21V18M15 21V18M6 9H3M6 15H3M21 9H18M21 15H18" fill="none" stroke="#2b2b2b" stroke-width="1.6" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="icon-film" viewBox="0 0 24 24">
+    <rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="#2b2b2b" stroke-width="1.8"/>
+    <path d="M8.5 6V18M15.5 6V18" fill="none" stroke="#2b2b2b" stroke-width="1.5"/>
+  </symbol>
+  <symbol id="icon-cloud" viewBox="0 0 24 24">
+    <path d="M7 17 Q3 17 3 13.2 Q3 10.2 6.2 9.7 Q6.8 6 10.3 6 Q13.3 6 14.3 8.6 Q17.3 8.1 18.8 10.6 Q21.5 11 21.5 14 Q21.5 17 17.3 17 Z" fill="none" stroke="#2b2b2b" stroke-width="1.8" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="icon-phone" viewBox="0 0 24 24">
+    <rect x="7.5" y="2.5" width="9" height="19" rx="2" fill="none" stroke="#2b2b2b" stroke-width="1.8"/>
+    <line x1="10" y1="19" x2="14" y2="19" stroke="#2b2b2b" stroke-width="1.8" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="icon-laptop" viewBox="0 0 24 24">
+    <rect x="3.5" y="4.5" width="17" height="11" rx="1.5" fill="none" stroke="#2b2b2b" stroke-width="1.8"/>
+    <path d="M1.5 18.5 L22.5 18.5 L20.5 15.5 L3.5 15.5 Z" fill="none" stroke="#2b2b2b" stroke-width="1.8" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="icon-tv" viewBox="0 0 24 24">
+    <rect x="3" y="4" width="18" height="12" rx="1.5" fill="none" stroke="#2b2b2b" stroke-width="1.8"/>
+    <line x1="9" y1="20" x2="15" y2="20" stroke="#2b2b2b" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="12" y1="16" x2="12" y2="20" stroke="#2b2b2b" stroke-width="1.8" stroke-linecap="round"/>
+  </symbol>
+</defs>
+</svg>
+
+<div class="wrap">
+  <h1 class="title">Media pipeline, sketched out</h1>
+  <svg class="underline" width="230" height="14" viewBox="0 0 230 14"><path d="M2,8 Q40,2 80,9 T160,6 T228,10" fill="none" stroke="var(--packet)" stroke-width="3" stroke-linecap="round"/></svg>
+  <p class="intro">two slides: how the pipeline works, then a real example. hit play on either one.</p>
+  <p class="sr-only" id="srSummary">Two slide hand-drawn animated diagram. Slide one shows an eight stage media transcoding pipeline: upload, raw storage, event trigger, queue, worker, render, processed storage, and CDN delivery. Slide two shows a real world example of uploading a Facebook video and how viewers on different devices and networks receive different quality formats.</p>
+
+  <div class="tabs">
+    <button class="tab-btn tab-active" id="tabBtn1" type="button">1 · Pipeline</button>
+    <button class="tab-btn" id="tabBtn2" type="button">2 · Real-world example</button>
+  </div>
+
+  <!-- ===================== SLIDE 1 : PIPELINE ===================== -->
+  <div class="scene active" id="s1-scene">
+    <p class="scene-note">upload → raw storage → async transcode → deliver.</p>
+    <div class="svg-wrap">
+      <svg class="diagram" viewBox="0 0 1000 400" role="img" aria-labelledby="srSummary">
+        <path id="s1-conn-0" class="connector" filter="url(#sketchy)" d="M220,122 Q250,110 281,122" marker-end="url(#arrow)"/>
+        <path id="s1-conn-1" class="connector" filter="url(#sketchy)" d="M467,122 Q497,110 528,122" marker-end="url(#arrow)"/>
+        <path id="s1-conn-2" class="connector" filter="url(#sketchy)" d="M714,122 Q745,110 775,122" marker-end="url(#arrow)"/>
+        <path id="s1-conn-3" class="connector" filter="url(#sketchy)" d="M871,154 Q884,219 871,284" marker-end="url(#arrow)"/>
+        <path id="s1-conn-4" class="connector" filter="url(#sketchy)" d="M781,322 Q750,334 720,322" marker-end="url(#arrow)"/>
+        <path id="s1-conn-5" class="connector" filter="url(#sketchy)" d="M534,322 Q503,334 473,322" marker-end="url(#arrow)"/>
+        <path id="s1-conn-6" class="connector" filter="url(#sketchy)" d="M287,322 Q256,334 226,322" marker-end="url(#arrow)"/>
+
+        <g id="s1-node-0" class="node c-neutral" transform="rotate(-1.4 130 122)">
+          <rect class="halo" x="30" y="80" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="40" y="90" width="180" height="64" rx="14"/>
+          <use href="#icon-upload" x="54" y="108" width="28" height="28"/>
+          <text class="node-title" x="92" y="114" dominant-baseline="central">UPLOAD</text>
+          <text class="node-sub" x="92" y="134" dominant-baseline="central">no AWS (client)</text>
+        </g>
+        <g id="s1-node-1" class="node c-storage" transform="rotate(1 377 122)">
+          <rect class="halo" x="277" y="80" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="287" y="90" width="180" height="64" rx="14"/>
+          <use href="#icon-bucket" x="301" y="108" width="28" height="28"/>
+          <text class="node-title" x="339" y="114" dominant-baseline="central">S3 : RAW</text>
+          <text class="node-service" x="339" y="134" dominant-baseline="central">Amazon S3</text>
+        </g>
+        <g id="s1-node-2" class="node c-neutral" transform="rotate(-.8 624 122)">
+          <rect class="halo" x="524" y="80" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="534" y="90" width="180" height="64" rx="14"/>
+          <use href="#icon-bell" x="548" y="108" width="28" height="28"/>
+          <text class="node-title" x="586" y="114" dominant-baseline="central">S3 EVENT</text>
+          <text class="node-service" x="586" y="134" dominant-baseline="central">S3 Notifications</text>
+        </g>
+        <g id="s1-node-3" class="node c-neutral" transform="rotate(1.3 871 122)">
+          <rect class="halo" x="771" y="80" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="781" y="90" width="180" height="64" rx="14"/>
+          <use href="#icon-queue" x="795" y="108" width="28" height="28"/>
+          <text class="node-title" x="833" y="114" dominant-baseline="central">QUEUE</text>
+          <text class="node-service" x="833" y="134" dominant-baseline="central">Amazon SQS</text>
+        </g>
+        <g id="s1-node-4" class="node c-compute" transform="rotate(-1.1 871 322)">
+          <rect class="halo" x="771" y="280" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="781" y="290" width="180" height="64" rx="14"/>
+          <use href="#icon-chip" x="795" y="308" width="28" height="28"/>
+          <text class="node-title" x="833" y="314" dominant-baseline="central">WORKER</text>
+          <text class="node-service" x="833" y="334" dominant-baseline="central">AWS Lambda</text>
+        </g>
+        <g id="s1-node-5" class="node c-compute" transform="rotate(.9 624 322)">
+          <rect class="halo" x="524" y="280" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="534" y="290" width="180" height="64" rx="14"/>
+          <use href="#icon-film" x="548" y="308" width="28" height="28"/>
+          <text class="node-title" x="586" y="314" dominant-baseline="central">RENDER</text>
+          <text class="node-service" x="586" y="334" dominant-baseline="central">MediaConvert</text>
+        </g>
+        <g id="s1-node-6" class="node c-storage" transform="rotate(-1.3 377 322)">
+          <rect class="halo" x="277" y="280" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="287" y="290" width="180" height="64" rx="14"/>
+          <use href="#icon-bucket" x="301" y="308" width="28" height="28"/>
+          <text class="node-title" x="339" y="314" dominant-baseline="central">S3 : OUT</text>
+          <text class="node-service" x="339" y="334" dominant-baseline="central">Amazon S3</text>
+        </g>
+        <g id="s1-node-7" class="node c-delivery" transform="rotate(1.1 130 322)">
+          <rect class="halo" x="30" y="280" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="40" y="290" width="180" height="64" rx="14"/>
+          <use href="#icon-cloud" x="54" y="308" width="28" height="28"/>
+          <text class="node-title" x="92" y="314" dominant-baseline="central">CDN</text>
+          <text class="node-service" x="92" y="334" dominant-baseline="central">CloudFront</text>
+        </g>
+
+        <circle id="s1-packet" class="packet" cx="0" cy="0" r="9" filter="url(#sketchy)" style="transform:translate(130px,122px)"/>
+      </svg>
+    </div>
+
+    <div class="caption-card">
+      <span class="stage-label" id="s1-capIndex">stage 1 / 8</span>
+      <p class="caption-text" id="s1-capText">Click Play to start the narrated walkthrough.</p>
+      <div class="progress-track"><div class="progress-fill" id="s1-progressFill"></div></div>
+    </div>
+    <div class="controls">
+      <button id="s1-playBtn">Play</button>
+      <button id="s1-restartBtn">Restart</button>
+      <select id="s1-voiceSelect" aria-label="Narration voice"></select>
+      <label class="check-label"><input type="checkbox" id="s1-capOnlyChk"> captions only (no voice)</label>
+    </div>
+  </div>
+
+  <!-- ===================== SLIDE 2 : REAL WORLD EXAMPLE ===================== -->
+  <div class="scene" id="s2-scene">
+    <p class="scene-note">a Facebook video upload. Facebook runs its own infrastructure, not AWS — the orange tags show the closest AWS equivalent for each step.</p>
+    <div class="svg-wrap">
+      <svg class="diagram" viewBox="0 0 1000 580" role="img" aria-labelledby="srSummary">
+        <path id="s2-conn-0" class="connector" filter="url(#sketchy)" d="M220,122 Q250,110 281,122" marker-end="url(#arrow)"/>
+        <path id="s2-conn-1" class="connector" filter="url(#sketchy)" d="M467,122 Q497,110 528,122" marker-end="url(#arrow)"/>
+        <path id="s2-conn-2" class="connector" filter="url(#sketchy)" d="M714,122 Q745,110 775,122" marker-end="url(#arrow)"/>
+        <path id="s2-conn-3" class="connector" filter="url(#sketchy)" d="M871,154 Q884,219 871,284" marker-end="url(#arrow)"/>
+        <path id="s2-conn-4" class="connector" filter="url(#sketchy)" d="M871,354 Q550,395 160,470" marker-end="url(#arrow)"/>
+        <path id="s2-conn-5" class="connector" filter="url(#sketchy)" d="M871,354 Q700,430 500,470" marker-end="url(#arrow)"/>
+        <path id="s2-conn-6" class="connector" filter="url(#sketchy)" d="M871,354 Q860,410 840,470" marker-end="url(#arrow)"/>
+
+        <g id="s2-node-0" class="node c-neutral" transform="rotate(-1.4 130 122)">
+          <rect class="halo" x="30" y="80" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="40" y="90" width="180" height="64" rx="14"/>
+          <use href="#icon-upload" x="54" y="108" width="28" height="28"/>
+          <text class="node-title" x="92" y="114" dominant-baseline="central">UPLOAD</text>
+          <text class="node-sub" x="92" y="134" dominant-baseline="central">no AWS (client)</text>
+        </g>
+        <g id="s2-node-1" class="node c-storage" transform="rotate(1 377 122)">
+          <rect class="halo" x="277" y="80" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="287" y="90" width="180" height="64" rx="14"/>
+          <use href="#icon-bucket" x="301" y="108" width="28" height="28"/>
+          <text class="node-title" x="339" y="114" dominant-baseline="central">FB : RAW</text>
+          <text class="node-service" x="339" y="134" dominant-baseline="central">≈ Amazon S3</text>
+        </g>
+        <g id="s2-node-2" class="node c-compute" transform="rotate(-.8 624 122)">
+          <rect class="halo" x="524" y="80" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="534" y="90" width="180" height="64" rx="14"/>
+          <use href="#icon-chip" x="548" y="108" width="28" height="28"/>
+          <text class="node-title" x="586" y="114" dominant-baseline="central">TRANSCODE</text>
+          <text class="node-service" x="586" y="134" dominant-baseline="central">≈ MediaConvert</text>
+        </g>
+        <g id="s2-node-3" class="node c-compute" transform="rotate(1.3 871 122)">
+          <rect class="halo" x="771" y="80" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="781" y="90" width="180" height="64" rx="14"/>
+          <use href="#icon-film" x="795" y="108" width="28" height="28"/>
+          <text class="node-title" x="833" y="114" dominant-baseline="central">FORMATS</text>
+          <text class="node-service" x="833" y="134" dominant-baseline="central">≈ S3, 240p-1080p</text>
+        </g>
+        <g id="s2-node-4" class="node c-delivery" transform="rotate(-1.1 871 322)">
+          <rect class="halo" x="771" y="280" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="781" y="290" width="180" height="64" rx="14"/>
+          <use href="#icon-cloud" x="795" y="308" width="28" height="28"/>
+          <text class="node-title" x="833" y="314" dominant-baseline="central">CDN EDGE</text>
+          <text class="node-service" x="833" y="334" dominant-baseline="central">≈ CloudFront</text>
+        </g>
+        <g id="s2-node-5" class="node c-neutral" transform="rotate(1.2 160 502)">
+          <rect class="halo" x="60" y="460" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="70" y="470" width="180" height="64" rx="14"/>
+          <use href="#icon-phone" x="84" y="488" width="28" height="28"/>
+          <text class="node-title" x="122" y="494" dominant-baseline="central">PHONE</text>
+          <text class="node-sub" x="122" y="514" dominant-baseline="central">480p on 4G</text>
+        </g>
+        <g id="s2-node-6" class="node c-neutral" transform="rotate(-.9 500 502)">
+          <rect class="halo" x="400" y="460" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="410" y="470" width="180" height="64" rx="14"/>
+          <use href="#icon-laptop" x="424" y="488" width="28" height="28"/>
+          <text class="node-title" x="462" y="494" dominant-baseline="central">LAPTOP</text>
+          <text class="node-sub" x="462" y="514" dominant-baseline="central">1080p on wifi</text>
+        </g>
+        <g id="s2-node-7" class="node c-neutral" transform="rotate(1.1 840 502)">
+          <rect class="halo" x="740" y="460" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="750" y="470" width="180" height="64" rx="14"/>
+          <use href="#icon-tv" x="764" y="488" width="28" height="28"/>
+          <text class="node-title" x="802" y="494" dominant-baseline="central">SMART TV</text>
+          <text class="node-sub" x="802" y="514" dominant-baseline="central">4K on fiber</text>
+        </g>
+
+        <circle id="s2-packet" class="packet" cx="0" cy="0" r="9" filter="url(#sketchy)" style="transform:translate(130px,122px)"/>
+      </svg>
+    </div>
+
+    <div class="caption-card">
+      <span class="stage-label" id="s2-capIndex">stage 1 / 8</span>
+      <p class="caption-text" id="s2-capText">Click Play to start the narrated walkthrough.</p>
+      <div class="progress-track"><div class="progress-fill" id="s2-progressFill"></div></div>
+    </div>
+    <div class="controls">
+      <button id="s2-playBtn">Play</button>
+      <button id="s2-restartBtn">Restart</button>
+      <select id="s2-voiceSelect" aria-label="Narration voice"></select>
+      <label class="check-label"><input type="checkbox" id="s2-capOnlyChk"> captions only (no voice)</label>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function makeScene(prefix, stages) {
+  const root = document.getElementById(prefix + '-scene');
+  const packet = document.getElementById(prefix + '-packet');
+  const capText = document.getElementById(prefix + '-capText');
+  const capIndex = document.getElementById(prefix + '-capIndex');
+  const progressFill = document.getElementById(prefix + '-progressFill');
+  const playBtn = document.getElementById(prefix + '-playBtn');
+  const voiceSelect = document.getElementById(prefix + '-voiceSelect');
+  const capOnlyChk = document.getElementById(prefix + '-capOnlyChk');
+
+  let idx = 0, playing = false, capOnly = false, voices = [], chosenVoice = null, advanceTimer = null;
+
+  function populateVoices() {
+    const all = speechSynthesis.getVoices();
+    voices = all.filter(v => v.lang.startsWith('en'));
+    if (voices.length === 0) voices = all;
+    voiceSelect.innerHTML = '';
+    voices.forEach((v, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = v.name;
+      voiceSelect.appendChild(opt);
+    });
+    if (voices.length) chosenVoice = voices[0];
+  }
+  if ('speechSynthesis' in window) {
+    populateVoices();
+    speechSynthesis.onvoiceschanged = populateVoices;
+  }
+  voiceSelect.onchange = () => { chosenVoice = voices[voiceSelect.value]; };
+  capOnlyChk.onchange = e => { capOnly = e.target.checked; };
+
+  function setActive(i) {
+    root.querySelectorAll('.node').forEach(n => n.classList.remove('active'));
+    const el = document.getElementById(prefix + '-node-' + i);
+    if (el) el.classList.add('active');
+  }
+
+  function litConnectorsUpTo(i) {
+    root.querySelectorAll('.connector').forEach(c => c.classList.remove('lit'));
+    for (let k = 0; k < i; k++) {
+      const c = document.getElementById(prefix + '-conn-' + k);
+      if (c) c.classList.add('lit');
+    }
+  }
+
+  function movePacket(i) {
+    const s = stages[i];
+    packet.style.transform = 'translate(' + s.cx + 'px,' + s.cy + 'px)';
+  }
+
+  function goTo(i) {
+    idx = i;
+    const s = stages[i];
+    capText.textContent = s.script;
+    capIndex.textContent = 'stage ' + (i + 1) + ' / ' + stages.length;
+    progressFill.style.width = (i / (stages.length - 1) * 100) + '%';
+    setActive(i);
+    litConnectorsUpTo(i);
+    movePacket(i);
+  }
+
+  function speakCurrent() {
+    const s = stages[idx];
+    clearTimeout(advanceTimer);
+    if (capOnly || !('speechSynthesis' in window)) {
+      advanceTimer = setTimeout(() => { if (playing) advance(); }, 3400);
+      return;
+    }
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(s.script);
+    if (chosenVoice) u.voice = chosenVoice;
+    u.rate = 1;
+    u.onend = () => { if (playing) advance(); };
+    speechSynthesis.speak(u);
+  }
+
+  function advance() {
+    if (idx >= stages.length - 1) { stop(); return; }
+    goTo(idx + 1);
+    speakCurrent();
+  }
+
+  function play() {
+    playing = true;
+    playBtn.textContent = 'Pause';
+    if (idx >= stages.length - 1) idx = 0;
+    goTo(idx);
+    speakCurrent();
+  }
+
+  function stop() {
+    playing = false;
+    playBtn.textContent = 'Play';
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    clearTimeout(advanceTimer);
+  }
+
+  function restart() {
+    stop();
+    goTo(0);
+    capText.textContent = 'Click Play to start the narrated walkthrough.';
+  }
+
+  playBtn.onclick = () => { playing ? stop() : play(); };
+  document.getElementById(prefix + '-restartBtn').onclick = restart;
+
+  goTo(0);
+  return { stop: stop };
+}
+
+const scene1Stages = [
+  {cx:130, cy:122, script:'The client streams the file straight into blob storage using a signed upload URL. This step runs on the client, no AWS service yet.'},
+  {cx:377, cy:122, script:'The original file lands in Amazon S3, inside a private raw bucket.'},
+  {cx:624, cy:122, script:'Amazon S3 event notifications detect the new object and fire an event, no polling required.'},
+  {cx:871, cy:122, script:'The job waits in an Amazon SQS queue until a worker is free to pick it up.'},
+  {cx:871, cy:322, script:'An AWS Lambda function picks up the job and kicks off the encoder.'},
+  {cx:624, cy:322, script:'AWS Elemental MediaConvert produces several resolutions, plus a thumbnail.'},
+  {cx:377, cy:322, script:'Finished renditions are written back to Amazon S3, in a separate processed bucket.'},
+  {cx:130, cy:322, script:'Amazon CloudFront caches the video at edge locations close to the viewer.'}
+];
+
+const scene2Stages = [
+  {cx:130, cy:122, script:'You upload a short video straight from your phone. This step happens on the client, no AWS service involved.'},
+  {cx:377, cy:122, script:'Facebook stores the original file in raw storage — the same role Amazon S3 plays on AWS.'},
+  {cx:624, cy:122, script:'A transcoding step encodes it into several formats, the same role AWS Elemental MediaConvert plays.'},
+  {cx:871, cy:122, script:'Multiple renditions come out, from 240p up to 1080p or higher, ready to be stored.'},
+  {cx:871, cy:322, script:'Renditions are pushed to edge servers close to viewers, the same role Amazon CloudFront plays on AWS.'},
+  {cx:160, cy:502, script:'On a phone with a weak 4G signal, the app quietly plays the 480p version.'},
+  {cx:500, cy:502, script:'On a laptop over wifi, the same video streams smoothly at 1080p.'},
+  {cx:840, cy:502, script:'On a smart TV with a fiber connection, it plays back in full 4K.'}
+];
+
+const scene1 = makeScene('s1', scene1Stages);
+const scene2 = makeScene('s2', scene2Stages);
+
+const tabBtn1 = document.getElementById('tabBtn1');
+const tabBtn2 = document.getElementById('tabBtn2');
+const s1Scene = document.getElementById('s1-scene');
+const s2Scene = document.getElementById('s2-scene');
+
+function showScene(n) {
+  scene1.stop();
+  scene2.stop();
+  s1Scene.classList.toggle('active', n === 1);
+  s2Scene.classList.toggle('active', n === 2);
+  tabBtn1.classList.toggle('tab-active', n === 1);
+  tabBtn2.classList.toggle('tab-active', n === 2);
+}
+tabBtn1.onclick = () => showScene(1);
+tabBtn2.onclick = () => showScene(2);
+</script>
+</body>
+</html>
