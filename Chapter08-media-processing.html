@@ -446,7 +446,7 @@ select{font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background
 </div>
 
 <script>
-function makeScene(prefix, stages) {
+function makeScene(prefix, stages, onFinish) {
   const root = document.getElementById(prefix + '-scene');
   const packet = document.getElementById(prefix + '-packet');
   const capText = document.getElementById(prefix + '-capText');
@@ -457,6 +457,13 @@ function makeScene(prefix, stages) {
   const capOnlyChk = document.getElementById(prefix + '-capOnlyChk');
 
   let idx = 0, playing = false, capOnly = false, voices = [], chosenVoice = null, advanceTimer = null;
+
+  function pickDefaultVoice() {
+    let i = voices.findIndex(v => v.name === 'Google UK English Female');
+    if (i === -1) i = voices.findIndex(v => /UK/i.test(v.name) && /female/i.test(v.name));
+    if (i === -1) i = voices.findIndex(v => /UK/i.test(v.name) || /en-GB/i.test(v.lang));
+    return i === -1 ? 0 : i;
+  }
 
   function populateVoices() {
     const all = speechSynthesis.getVoices();
@@ -469,7 +476,11 @@ function makeScene(prefix, stages) {
       opt.textContent = v.name;
       voiceSelect.appendChild(opt);
     });
-    if (voices.length) chosenVoice = voices[0];
+    if (voices.length) {
+      const defaultIdx = pickDefaultVoice();
+      chosenVoice = voices[defaultIdx];
+      voiceSelect.value = defaultIdx;
+    }
   }
   if ('speechSynthesis' in window) {
     populateVoices();
@@ -524,7 +535,7 @@ function makeScene(prefix, stages) {
   }
 
   function advance() {
-    if (idx >= stages.length - 1) { stop(); return; }
+    if (idx >= stages.length - 1) { finish(); return; }
     goTo(idx + 1);
     speakCurrent();
   }
@@ -544,6 +555,11 @@ function makeScene(prefix, stages) {
     clearTimeout(advanceTimer);
   }
 
+  function finish() {
+    stop();
+    if (onFinish) setTimeout(onFinish, 900);
+  }
+
   function restart() {
     stop();
     goTo(0);
@@ -554,13 +570,13 @@ function makeScene(prefix, stages) {
   document.getElementById(prefix + '-restartBtn').onclick = restart;
 
   goTo(0);
-  return { stop: stop };
+  return { stop: stop, play: play };
 }
 
 const scene0Stages = [
   {cx:150, cy:122, script:"Say the system only ever stores a single master copy of the video — the original, full-resolution 4K file. No smaller versions exist anywhere."},
   {cx:450, cy:122, script:"Now picture someone opening the app on a train, their phone showing just one bar of 4G signal."},
-  {cx:750, cy:122, script:"Their phone still has to pull that same giant 4K master file over that weak connection — so it just spins, and spins, and never finishes loading."}
+  {cx:750, cy:122, script:"Their phone still has to pull that same giant 4K master file over that weak connection — so it just spins, and spins, and never finishes loading. Let's check how a media processing pipeline fixes this, in the next slide."}
 ];
 
 const scene1Stages = [
@@ -571,7 +587,7 @@ const scene1Stages = [
   {cx:871, cy:322, script:'An AWS Lambda function picks up the job and kicks off the encoder.'},
   {cx:624, cy:322, script:'AWS Elemental MediaConvert produces several resolutions, plus a thumbnail.'},
   {cx:377, cy:322, script:'Finished renditions are written back to Amazon S3, in a separate processed bucket.'},
-  {cx:130, cy:322, script:'Amazon CloudFront caches the video at edge locations close to the viewer.'}
+  {cx:130, cy:322, script:"Amazon CloudFront caches the video at edge locations close to the viewer. Now let's see a real-world example of this in action."}
 ];
 
 const scene2Stages = [
@@ -582,12 +598,8 @@ const scene2Stages = [
   {cx:871, cy:322, script:'Renditions are pushed to edge servers close to viewers, the same role Amazon CloudFront plays on AWS.'},
   {cx:160, cy:502, script:'On a phone with a weak 4G signal, the app quietly plays the 480p version.'},
   {cx:500, cy:502, script:'On a laptop over wifi, the same video streams smoothly at 1080p.'},
-  {cx:840, cy:502, script:'On a smart TV with a fiber connection, it plays back in full 4K.'}
+  {cx:840, cy:502, script:"On a smart TV with a fiber connection, it plays back in full 4K. That's the pipeline, end to end — matched to whatever connection someone's on."}
 ];
-
-const scene0 = makeScene('s0', scene0Stages);
-const scene1 = makeScene('s1', scene1Stages);
-const scene2 = makeScene('s2', scene2Stages);
 
 const tabBtn0 = document.getElementById('tabBtn0');
 const tabBtn1 = document.getElementById('tabBtn1');
@@ -610,6 +622,10 @@ function showScene(n) {
 tabBtn0.onclick = () => showScene(0);
 tabBtn1.onclick = () => showScene(1);
 tabBtn2.onclick = () => showScene(2);
+
+const scene0 = makeScene('s0', scene0Stages, () => { showScene(1); scene1.play(); });
+const scene1 = makeScene('s1', scene1Stages, () => { showScene(2); scene2.play(); });
+const scene2 = makeScene('s2', scene2Stages);
 </script>
 </body>
 </html>
