@@ -39,7 +39,7 @@
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding: 24px 16px;
+    padding: clamp(10px, 3vw, 24px) clamp(6px, 3vw, 16px);
   }
 
   .card {
@@ -47,8 +47,21 @@
     border: none;
     border-radius: 16px;
     width: 100%;
-    max-width: 700px;
+    max-width: min(96vw, 700px);
     overflow: hidden;
+  }
+
+  /* Scale the card up on larger screens (tablets landscape, desktops, big displays/TVs)
+     so the experience isn't stuck at a small fixed width on a big screen. */
+  @media (min-width: 900px)  { .card { max-width: min(80vw, 820px); } }
+  @media (min-width: 1300px) { .card { max-width: min(64vw, 960px); } }
+  @media (min-width: 1900px) { .card { max-width: min(52vw, 1120px); } }
+
+  /* Stack two-column grids on narrow phones so text has room to breathe */
+  @media (max-width: 420px) {
+    .intro-cards, .stats-row, .concepts-grid { grid-template-columns: 1fr; }
+    .header { flex-wrap: wrap; }
+    .header-right { align-items: flex-start; flex-direction: row; }
   }
 
   /* ── Header ── */
