@@ -473,7 +473,7 @@ function makeScene(prefix, stages) {
   }
   if ('speechSynthesis' in window) {
     populateVoices();
-    speechSynthesis.onvoiceschanged = populateVoices;
+    speechSynthesis.addEventListener('voiceschanged', populateVoices);
   }
   voiceSelect.onchange = () => { chosenVoice = voices[voiceSelect.value]; };
   capOnlyChk.onchange = e => { capOnly = e.target.checked; };
