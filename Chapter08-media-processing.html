@@ -18,6 +18,7 @@
   --c-storage-fill:#5fc9ff;  --c-storage-stroke:#0a63c2;
   --c-compute-fill:#ffcb3d;  --c-compute-stroke:#e8590c;
   --c-delivery-fill:#4fe08f; --c-delivery-stroke:#128a4a;
+  --c-problem-fill:#ffb3b3; --c-problem-stroke:#c92a2a;
   --packet:#ff4d94; --packet-stroke:#8a1450;
   --highlight:#ffe94d;
 }
@@ -57,8 +58,12 @@ svg.diagram{display:block;width:100%;min-width:820px;height:auto;}
 .c-storage .node-box{fill:var(--c-storage-fill);stroke:var(--c-storage-stroke);}
 .c-compute .node-box{fill:var(--c-compute-fill);stroke:var(--c-compute-stroke);}
 .c-delivery .node-box{fill:var(--c-delivery-fill);stroke:var(--c-delivery-stroke);}
+.c-problem .node-box{fill:var(--c-problem-fill);stroke:var(--c-problem-stroke);}
 .packet{fill:var(--packet);stroke:var(--packet-stroke);stroke-width:2.5;filter:drop-shadow(1px 3px 0 rgba(0,0,0,.18));transition:transform .8s cubic-bezier(.4,0,.2,1);}
 .caption-card{background:#fffaf0;border:2.5px solid var(--ink);border-radius:16px 8px 18px 10px;padding:16px 20px;margin-top:22px;transform:rotate(-.3deg);box-shadow:3px 3px 0 rgba(0,0,0,.08);}
+.why-card{background:#fffaf0;border:2.5px solid var(--c-problem-stroke);border-radius:8px 16px 10px 18px;padding:16px 20px;margin-top:18px;transform:rotate(.4deg);box-shadow:3px 3px 0 rgba(0,0,0,.08);}
+.why-card .stage-label{color:var(--c-problem-stroke);}
+.why-text{margin:6px 0 0;font-size:15px;line-height:1.6;color:var(--ink);}
 .stage-label{font-family:'Kalam',cursive;font-weight:700;font-size:13px;color:var(--packet-stroke);}
 .caption-text{margin:6px 0 0;font-size:16px;line-height:1.55;color:var(--ink);}
 .progress-track{height:9px;border:1.5px solid var(--ink);background:#efe9db;border-radius:20px;margin-top:14px;overflow:hidden;}
@@ -81,6 +86,8 @@ select{font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background
 .node.active .anim-q.q2{animation-delay:.22s;}
 .node.active .anim-q.q3{animation-delay:.44s;}
 .node.active .anim-spin{animation:animSpin 1.1s linear infinite;}
+.node.active .anim-spin.warn{animation:animSpin 1.6s linear infinite;stroke:var(--c-problem-stroke);}
+.node.active .anim-pulse{animation:animQueueStep 1.2s ease-in-out infinite;}
 .node.active .anim-scan{animation:animScan 1.3s ease-in-out infinite;}
 .node.active .anim-play{animation:animPlayPulse 1s ease-in-out infinite;}
 
@@ -153,22 +160,96 @@ select{font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background
     <line x1="9" y1="20" x2="15" y2="20" stroke="#241f3d" stroke-width="1.8" stroke-linecap="round"/>
     <line x1="12" y1="16" x2="12" y2="20" stroke="#241f3d" stroke-width="1.8" stroke-linecap="round"/>
   </symbol>
+  <symbol id="icon-masterfile" viewBox="0 0 24 24">
+    <path d="M6 2 H15 L20 7 V20 A2 2 0 0 1 18 22 H6 A2 2 0 0 1 4 20 V4 A2 2 0 0 1 6 2 Z" fill="none" stroke="#241f3d" stroke-width="1.7" stroke-linejoin="round"/>
+    <path d="M15 2 V7 H20" fill="none" stroke="#241f3d" stroke-width="1.7" stroke-linejoin="round"/>
+    <path d="M9.5 12.5 L9.5 17.5 L14 15 Z" fill="#241f3d"/>
+  </symbol>
+  <symbol id="icon-signal" viewBox="0 0 24 24">
+    <rect x="2" y="15" width="3.4" height="6" rx=".8" fill="#241f3d" stroke="#241f3d" stroke-width="1.2"/>
+    <rect x="8.3" y="11" width="3.4" height="10" rx=".8" fill="none" stroke="#241f3d" stroke-width="1.4" stroke-dasharray="1.6 1.8"/>
+    <rect x="14.6" y="7" width="3.4" height="14" rx=".8" fill="none" stroke="#241f3d" stroke-width="1.4" stroke-dasharray="1.6 1.8"/>
+    <rect x="20.9" y="3" width="2.6" height="18" rx=".8" fill="none" stroke="#241f3d" stroke-width="1.4" stroke-dasharray="1.6 1.8"/>
+  </symbol>
+  <symbol id="icon-blocked" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9" fill="none" stroke="#241f3d" stroke-width="1.8"/>
+    <line x1="6.2" y1="17.8" x2="17.8" y2="6.2" stroke="#241f3d" stroke-width="1.8" stroke-linecap="round"/>
+  </symbol>
 </defs>
 </svg>
 
 <div class="wrap">
   <h1 class="title">Media pipeline, sketched out</h1>
   <svg class="underline" width="230" height="14" viewBox="0 0 230 14"><path d="M2,8 Q40,2 80,9 T160,6 T228,10" fill="none" stroke="var(--packet)" stroke-width="3" stroke-linecap="round"/></svg>
-  <p class="intro">two slides: how the pipeline works, then a real example. hit play on either one.</p>
-  <p class="sr-only" id="srSummary">Two slide hand-drawn animated diagram. Slide one shows an eight stage media transcoding pipeline: upload, raw storage, event trigger, queue, worker, render, processed storage, and CDN delivery. Slide two shows a real world example of uploading a Facebook video and how viewers on different devices and networks receive different quality formats.</p>
+  <p class="intro">three slides: why this exists, how the pipeline works, then a real example. hit play on any of them.</p>
+  <p class="sr-only" id="srSummary">Three slide hand-drawn animated diagram. Slide one shows why the pipeline is needed: a single master 4K file fails to play for a viewer on a weak 4G connection. Slide two shows an eight stage media transcoding pipeline: upload, raw storage, event trigger, queue, worker, render, processed storage, and CDN delivery. Slide three shows a real world example of uploading a Facebook video and how viewers on different devices and networks receive different quality formats.</p>
 
   <div class="tabs">
-    <button class="tab-btn tab-active" id="tabBtn1" type="button">1 · Pipeline</button>
-    <button class="tab-btn" id="tabBtn2" type="button">2 · Real-world example</button>
+    <button class="tab-btn tab-active" id="tabBtn0" type="button">1 · Why it matters</button>
+    <button class="tab-btn" id="tabBtn1" type="button">2 · Pipeline</button>
+    <button class="tab-btn" id="tabBtn2" type="button">3 · Real-world example</button>
+  </div>
+
+  <!-- ===================== SLIDE 0 : WHY IT MATTERS ===================== -->
+  <div class="scene active" id="s0-scene">
+    <p class="scene-note">one master file, one weak signal — what actually happens?</p>
+    <div class="svg-wrap">
+      <svg class="diagram" viewBox="0 0 900 260" role="img" aria-labelledby="srSummary">
+        <path id="s0-conn-0" class="connector" filter="url(#sketchy)" d="M240,122 Q300,106 360,122" marker-end="url(#arrow)"/>
+        <path id="s0-conn-1" class="connector" filter="url(#sketchy)" d="M540,122 Q600,106 660,122" marker-end="url(#arrow)"/>
+
+        <g id="s0-node-0" class="node c-storage" transform="rotate(-1.2 150 122)">
+          <rect class="halo" x="50" y="80" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="60" y="90" width="180" height="64" rx="14"/>
+          <use href="#icon-masterfile" x="74" y="108" width="28" height="28"/>
+          <circle class="anim anim-pulse" cx="88" cy="131" r="3" fill="var(--packet)"/>
+          <text class="node-title" x="112" y="114" dominant-baseline="central">MASTER FILE</text>
+          <text class="node-sub" x="112" y="134" dominant-baseline="central">one file, full 4K</text>
+        </g>
+
+        <g id="s0-node-1" class="node c-neutral" transform="rotate(1 450 122)">
+          <rect class="halo" x="350" y="80" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="360" y="90" width="180" height="64" rx="14"/>
+          <use href="#icon-phone" x="374" y="108" width="28" height="28"/>
+          <use href="#icon-signal" x="510" y="98" width="16" height="16"/>
+          <circle class="anim anim-pulse" cx="518" cy="106" r="2.6" fill="var(--packet)"/>
+          <text class="node-title" x="412" y="114" dominant-baseline="central">PHONE</text>
+          <text class="node-sub" x="412" y="134" dominant-baseline="central">weak 4G · 1 bar</text>
+        </g>
+
+        <g id="s0-node-2" class="node c-problem" transform="rotate(-.9 750 122)">
+          <rect class="halo" x="650" y="80" width="200" height="84" rx="16"/>
+          <rect class="node-box" filter="url(#sketchy)" x="660" y="90" width="180" height="64" rx="14"/>
+          <circle class="anim anim-spin warn" cx="688" cy="122" r="15" fill="none" stroke="var(--packet)" stroke-width="2" stroke-linecap="round" stroke-dasharray="8 14"/>
+          <use href="#icon-blocked" x="674" y="108" width="28" height="28"/>
+          <text class="node-title" x="712" y="114" dominant-baseline="central">CAN'T PLAY</text>
+          <text class="node-sub" x="712" y="134" dominant-baseline="central">stuck buffering</text>
+        </g>
+
+        <circle id="s0-packet" class="packet" cx="0" cy="0" r="9" filter="url(#sketchy)" style="transform:translate(150px,122px)"/>
+      </svg>
+    </div>
+
+    <div class="caption-card">
+      <span class="stage-label" id="s0-capIndex">stage 1 / 3</span>
+      <p class="caption-text" id="s0-capText">Click Play to start the narrated walkthrough.</p>
+      <div class="progress-track"><div class="progress-fill" id="s0-progressFill"></div></div>
+    </div>
+    <div class="controls">
+      <button id="s0-playBtn">Play</button>
+      <button id="s0-restartBtn">Restart</button>
+      <select id="s0-voiceSelect" aria-label="Narration voice"></select>
+      <label class="check-label"><input type="checkbox" id="s0-capOnlyChk"> captions only (no voice)</label>
+    </div>
+
+    <div class="why-card">
+      <span class="stage-label">Why this system exists</span>
+      <p class="why-text">A phone on a strong connection can happily pull down a 4K file. A phone on one bar of 4G can't — and it shouldn't have to. If a service only ever stores and serves a single master rendition, every low-bandwidth viewer either stalls out or can't watch at all. A transcoding pipeline fixes this by producing several smaller renditions ahead of time, so each device gets handed the one that actually fits its connection. That's the problem the next two tabs solve.</p>
+    </div>
   </div>
 
   <!-- ===================== SLIDE 1 : PIPELINE ===================== -->
-  <div class="scene active" id="s1-scene">
+  <div class="scene" id="s1-scene">
     <p class="scene-note">upload → raw storage → async transcode → deliver.</p>
     <div class="svg-wrap">
       <svg class="diagram" viewBox="0 0 1000 400" role="img" aria-labelledby="srSummary">
@@ -476,6 +557,12 @@ function makeScene(prefix, stages) {
   return { stop: stop };
 }
 
+const scene0Stages = [
+  {cx:150, cy:122, script:"Say the system only ever stores a single master copy of the video — the original, full-resolution 4K file. No smaller versions exist anywhere."},
+  {cx:450, cy:122, script:"Now picture someone opening the app on a train, their phone showing just one bar of 4G signal."},
+  {cx:750, cy:122, script:"Their phone still has to pull that same giant 4K master file over that weak connection — so it just spins, and spins, and never finishes loading."}
+];
+
 const scene1Stages = [
   {cx:130, cy:122, script:'The client streams the file straight into blob storage using a signed upload URL. This step runs on the client, no AWS service yet.'},
   {cx:377, cy:122, script:'The original file lands in Amazon S3, inside a private raw bucket.'},
@@ -498,22 +585,29 @@ const scene2Stages = [
   {cx:840, cy:502, script:'On a smart TV with a fiber connection, it plays back in full 4K.'}
 ];
 
+const scene0 = makeScene('s0', scene0Stages);
 const scene1 = makeScene('s1', scene1Stages);
 const scene2 = makeScene('s2', scene2Stages);
 
+const tabBtn0 = document.getElementById('tabBtn0');
 const tabBtn1 = document.getElementById('tabBtn1');
 const tabBtn2 = document.getElementById('tabBtn2');
+const s0Scene = document.getElementById('s0-scene');
 const s1Scene = document.getElementById('s1-scene');
 const s2Scene = document.getElementById('s2-scene');
 
 function showScene(n) {
+  scene0.stop();
   scene1.stop();
   scene2.stop();
+  s0Scene.classList.toggle('active', n === 0);
   s1Scene.classList.toggle('active', n === 1);
   s2Scene.classList.toggle('active', n === 2);
+  tabBtn0.classList.toggle('tab-active', n === 0);
   tabBtn1.classList.toggle('tab-active', n === 1);
   tabBtn2.classList.toggle('tab-active', n === 2);
 }
+tabBtn0.onclick = () => showScene(0);
 tabBtn1.onclick = () => showScene(1);
 tabBtn2.onclick = () => showScene(2);
 </script>
