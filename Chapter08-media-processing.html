@@ -2,630 +2,1469 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Media pipeline — sketch walkthrough</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 8 — Media Processing &amp; Storage | Engineering Refresh</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{
-  --paper:#FFFCF5;
-  --rule:rgba(60,60,90,.08);
-  --margin:rgba(255,90,110,.4);
-  --ink:#241f3d;
-  --ink-soft:#6b6579;
-  --c-neutral-fill:#e6defc;  --c-neutral-stroke:#6b3fd4;
-  --c-storage-fill:#5fc9ff;  --c-storage-stroke:#0a63c2;
-  --c-compute-fill:#ffcb3d;  --c-compute-stroke:#e8590c;
-  --c-delivery-fill:#4fe08f; --c-delivery-stroke:#128a4a;
-  --c-problem-fill:#ffb3b3; --c-problem-stroke:#c92a2a;
-  --packet:#ff4d94; --packet-stroke:#8a1450;
-  --highlight:#ffe94d;
-}
-*{box-sizing:border-box;}
-body{
-  margin:0; min-height:100vh; padding:32px 20px; display:flex; justify-content:center;
-  background-color:var(--paper);
-  background-image:
-    linear-gradient(to right, transparent 55px, var(--margin) 55px, var(--margin) 57px, transparent 57px),
-    repeating-linear-gradient(to bottom, transparent 0 30px, var(--rule) 30px 31px);
-  color:var(--ink); font-family:'Inter',sans-serif;
-}
-.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
-.wrap{width:100%;max-width:1080px;}
-.title{font-family:'Kalam',cursive;font-weight:700;font-size:30px;margin:0;}
-.underline{display:block;margin:-2px 0 6px;}
-.intro{font-family:'Kalam',cursive;font-size:16px;color:var(--ink-soft);margin:0 0 16px;}
-.tabs{display:flex;gap:10px;margin-bottom:18px;}
-.tab-btn{font-family:'Kalam',cursive;font-weight:700;font-size:14px;color:var(--ink-soft);background:transparent;border:2px solid transparent;border-radius:10px 6px 12px 8px;padding:7px 16px;cursor:pointer;}
-.tab-btn:hover{color:var(--ink);}
-.tab-btn.tab-active{color:var(--ink);background:#fffaf0;border-color:var(--ink);box-shadow:2px 2px 0 rgba(0,0,0,.1);}
-.scene{display:none;}
-.scene.active{display:block;}
-.scene-note{font-size:14px;color:var(--ink-soft);margin:0 0 12px;}
-.svg-wrap{overflow-x:auto;}
-svg.diagram{display:block;width:100%;min-width:820px;height:auto;}
-.node-title{font-family:'Kalam',cursive;font-size:16px;font-weight:700;fill:var(--ink);}
-.node-sub{font-family:'Inter',sans-serif;font-size:11.5px;fill:var(--ink-soft);}
-.node-service{font-family:'Inter',sans-serif;font-weight:600;font-size:11.5px;fill:var(--packet-stroke);}
-.connector{stroke:#b6aed6;stroke-width:2.5;fill:none;transition:stroke .5s, stroke-width .5s;}
-.connector.lit{stroke:var(--packet);stroke-width:3;}
-.node-box{stroke-width:2.5;transition:stroke-width .3s;}
-.halo{opacity:0;fill:var(--highlight);transition:opacity .35s;}
-.node.active .halo{opacity:.85;}
-.node.active .node-box{stroke-width:3.5;}
-.c-neutral .node-box{fill:var(--c-neutral-fill);stroke:var(--c-neutral-stroke);}
-.c-storage .node-box{fill:var(--c-storage-fill);stroke:var(--c-storage-stroke);}
-.c-compute .node-box{fill:var(--c-compute-fill);stroke:var(--c-compute-stroke);}
-.c-delivery .node-box{fill:var(--c-delivery-fill);stroke:var(--c-delivery-stroke);}
-.c-problem .node-box{fill:var(--c-problem-fill);stroke:var(--c-problem-stroke);}
-.packet{fill:var(--packet);stroke:var(--packet-stroke);stroke-width:2.5;filter:drop-shadow(1px 3px 0 rgba(0,0,0,.18));transition:transform .8s cubic-bezier(.4,0,.2,1);}
-.caption-card{background:#fffaf0;border:2.5px solid var(--ink);border-radius:16px 8px 18px 10px;padding:16px 20px;margin-top:22px;transform:rotate(-.3deg);box-shadow:3px 3px 0 rgba(0,0,0,.08);}
-.why-card{background:#fffaf0;border:2.5px solid var(--c-problem-stroke);border-radius:8px 16px 10px 18px;padding:16px 20px;margin-top:18px;transform:rotate(.4deg);box-shadow:3px 3px 0 rgba(0,0,0,.08);}
-.why-card .stage-label{color:var(--c-problem-stroke);}
-.why-text{margin:6px 0 0;font-size:15px;line-height:1.6;color:var(--ink);}
-.stage-label{font-family:'Kalam',cursive;font-weight:700;font-size:13px;color:var(--packet-stroke);}
-.caption-text{margin:6px 0 0;font-size:16px;line-height:1.55;color:var(--ink);}
-.progress-track{height:9px;border:1.5px solid var(--ink);background:#efe9db;border-radius:20px;margin-top:14px;overflow:hidden;}
-.progress-fill{height:100%;width:0%;background:var(--packet);transition:width .6s ease;}
-.controls{display:flex;align-items:center;gap:12px;margin-top:18px;flex-wrap:wrap;}
-button{font-family:'Kalam',cursive;font-weight:700;font-size:15px;color:var(--ink);background:#fffaf0;border:2.5px solid var(--ink);border-radius:10px 6px 12px 8px;padding:8px 20px;cursor:pointer;box-shadow:2px 2px 0 rgba(0,0,0,.12);transition:transform .15s, background .2s;}
-button:hover{background:var(--highlight);}
-button:active{transform:translateY(2px);box-shadow:0 0 0 rgba(0,0,0,.12);}
-button:focus-visible{outline:2px solid var(--packet-stroke);outline-offset:2px;}
-select{font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:#fffaf0;border:2px solid var(--ink);border-radius:8px;padding:7px 10px;max-width:220px;}
-.check-label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-soft);margin-left:auto;font-family:'Inter',sans-serif;}
-.anim{opacity:0;}
-.anim-ring,.anim-spin,.anim-play{transform-box:fill-box;transform-origin:center;}
-.node.active .anim{opacity:1;}
-.node.active .anim-flowup{animation:animFlowUp 1.3s ease-in-out infinite;}
-.node.active .anim-flowdown{animation:animFlowDown 1.3s ease-in-out infinite;}
-.node.active .anim-ring{animation:animPing 1.5s ease-out infinite;}
-.node.active .anim-ring.d2{animation-delay:.5s;}
-.node.active .anim-q{animation:animQueueStep 1.2s ease-in-out infinite;}
-.node.active .anim-q.q2{animation-delay:.22s;}
-.node.active .anim-q.q3{animation-delay:.44s;}
-.node.active .anim-spin{animation:animSpin 1.1s linear infinite;}
-.node.active .anim-spin.warn{animation:animSpin 1.6s linear infinite;stroke:var(--c-problem-stroke);}
-.node.active .anim-pulse{animation:animQueueStep 1.2s ease-in-out infinite;}
-.node.active .anim-scan{animation:animScan 1.3s ease-in-out infinite;}
-.node.active .anim-play{animation:animPlayPulse 1s ease-in-out infinite;}
+  :root {
+    --bg:        #f0f2f5;
+    --surface:   #ffffff;
+    --surface2:  #f5f7fa;
+    --border:    #dde1ea;
+    --border2:   #c4cad8;
+    --text:      #1a1f2e;
+    --muted:     #5a6478;
+    --faint:     #9aa3b5;
+    --blue:      #1a7fe8;
+    --blue-bg:   #e8f2fd;
+    --green:     #18a864;
+    --green-bg:  #e6f7f0;
+    --red:       #e03e3e;
+    --red-bg:    #fdeaea;
+    --amber:     #d97b10;
+    --amber-bg:  #fef3e2;
+    --purple:    #7c3aed;
+    --purple-bg: #f3f0ff;
+    --font-ui:   'DM Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-@keyframes animFlowUp{0%{transform:translateY(13px);opacity:0}30%{opacity:1}100%{transform:translateY(-15px);opacity:0}}
-@keyframes animFlowDown{0%{transform:translateY(-13px);opacity:0}30%{opacity:1}100%{transform:translateY(15px);opacity:0}}
-@keyframes animPing{0%{transform:scale(.4);opacity:.9}100%{transform:scale(1.9);opacity:0}}
-@keyframes animQueueStep{0%,100%{opacity:.2;transform:translateX(0)}50%{opacity:1;transform:translateX(3px)}}
-@keyframes animSpin{to{transform:rotate(360deg)}}
-@keyframes animScan{0%{transform:translateX(-13px);opacity:0}20%{opacity:1}80%{opacity:1}100%{transform:translateX(13px);opacity:0}}
-@keyframes animPlayPulse{0%,100%{opacity:.4;transform:scale(.9)}50%{opacity:1;transform:scale(1.1)}}
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px;
+  }
 
-@media (prefers-reduced-motion: reduce){
-  .packet{transition:transform .05s linear;}
-  .connector,.node-box,.halo,.progress-fill{transition-duration:.05s;}
-  .anim-flowup,.anim-flowdown,.anim-ring,.anim-q,.anim-spin,.anim-scan,.anim-play{animation:none !important;}
-  .node.active .anim{opacity:.9;}
-}
+  .card {
+    background: var(--surface);
+    border: none;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 700px;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  .header {
+    padding: 18px 24px 16px;
+    border-bottom: none;
+    display: flex; align-items: flex-start;
+    justify-content: space-between; gap: 12px;
+  }
+  .header-left { flex: 1; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--blue); background: var(--blue-bg);
+    border: 1px solid rgba(26,127,232,.25); border-radius: 6px;
+    padding: 3px 9px; margin-bottom: 8px;
+  }
+  .header h1 { font-size: 19px; font-weight: 600; margin-bottom: 3px; }
+  .header p  { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+  .module-num {
+    font-family: var(--font-mono); font-size: 11px; color: var(--faint);
+    background: var(--surface2); border: none;
+    border-radius: 8px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  /* ── Audio toggle ── */
+  .audio-ctrl {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface2); border: none;
+    border-radius: 8px; padding: 5px 10px; cursor: pointer;
+    font-size: 11px; color: var(--muted); transition: all .35s ease;
+    user-select: none;
+  }
+  .audio-ctrl:hover { border-color: var(--border2); background: #edf0f5; }
+  .audio-ctrl.on { background: var(--blue-bg); border-color: rgba(26,127,232,.4); color: var(--blue); }
+  .audio-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); transition: background .2s; }
+  .audio-ctrl.on .audio-dot { background: var(--blue); animation: pulse 2.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.3);opacity:.6} }
+
+  /* ── Step progress bar ── */
+  .progress-bar {
+    display: flex; gap: 0;
+    border-bottom: none;
+  }
+  .prog-step {
+    flex: 1; padding: 8px 0; text-align: center;
+    font-family: var(--font-mono); font-size: 9px;
+    color: var(--faint); background: var(--surface2);
+    border-right: none;
+    transition: all .7s cubic-bezier(0.4,0,0.2,1); cursor: default;
+  }
+  .prog-step:last-child { border-right: none; }
+  .prog-step.active { background: var(--blue-bg); color: var(--blue); font-weight: 500; }
+  .prog-step.done   { background: var(--green-bg); color: var(--green); }
+  .prog-step.warn   { background: var(--red-bg);   color: var(--red); }
+
+  /* ── Screen container ── */
+  .screen-wrap {
+    min-height: 340px;
+    position: relative;
+  }
+
+  /* Each screen fades in */
+  .screen {
+    display: none;
+    padding: 20px 24px;
+    animation: fadeIn .9s cubic-bezier(0.22,0.61,0.36,1);
+  }
+  .screen.active { display: block; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ── Narrator bubble ── */
+  .narrator {
+    padding: 10px 14px; margin-bottom: 16px;
+    background: var(--blue-bg); border: none;
+    border-radius: 10px; font-size: 12px; color: var(--blue); line-height: 1.6;
+    display: none; align-items: flex-start; gap: 8px;
+  }
+  .narrator.visible { display: flex; }
+  .narrator-icon { font-size: 15px; flex-shrink: 0; }
+  .speaking-dots span {
+    display: inline-block; width: 4px; height: 4px; border-radius: 50%;
+    background: var(--blue); margin: 0 1px; vertical-align: middle;
+    animation: bounce 1.8s ease-in-out infinite;
+  }
+  .speaking-dots span:nth-child(2) { animation-delay: .2s; }
+  .speaking-dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+
+  /* ── Screen titles ── */
+  .screen-title {
+    font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--text);
+  }
+  .screen-sub {
+    font-size: 12px; color: var(--muted); margin-bottom: 16px; line-height: 1.5;
+  }
+
+  /* ── Schema tables ── */
+  .tables-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .db-table {
+    flex: 1; min-width: 140px;
+    background: var(--surface2); border: none;
+    border-radius: 10px; overflow: hidden;
+    transition: border-color .7s cubic-bezier(0.4,0,0.2,1), box-shadow .7s cubic-bezier(0.4,0,0.2,1), transform .7s cubic-bezier(0.4,0,0.2,1);
+  }
+  .db-table.highlight { border-color: var(--blue);  box-shadow: 0 0 0 3px rgba(26,127,232,.1); transform: translateY(-2px); }
+  .db-table.error     { border-color: var(--red);   box-shadow: 0 0 0 3px rgba(224,62,62,.1); }
+  .db-table.success   { border-color: var(--green);  box-shadow: 0 0 0 3px rgba(24,168,100,.1); transform: translateY(-2px); }
+  .table-header {
+    padding: 7px 12px; font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+    background: var(--border); color: var(--text);
+    display: flex; align-items: center; gap: 6px;
+    transition: background .7s cubic-bezier(0.4,0,0.2,1), color .7s cubic-bezier(0.4,0,0.2,1);
+  }
+  .db-table.highlight .table-header { background: var(--blue-bg);  color: var(--blue); }
+  .db-table.error     .table-header { background: var(--red-bg);   color: var(--red); }
+  .db-table.success   .table-header { background: var(--green-bg); color: var(--green); }
+  .table-field {
+    padding: 4px 12px; font-family: var(--font-mono); font-size: 10px;
+    color: var(--muted); border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between;
+  }
+  .field-pk { color: var(--amber); font-size: 9px; font-weight: 500; }
+  .field-fk { color: var(--blue);  font-size: 9px; font-weight: 500; }
+  .field-type { color: var(--faint); font-size: 9px; }
+
+  /* ── SQL query box (reused here as a plain code/detail box) ── */
+  .query-box {
+    background: #1a1f2e; border-radius: 10px; padding: 12px 16px; border: none;
+    font-family: var(--font-mono); font-size: 11px; line-height: 1.8;
+    color: #c9d1d9; overflow-x: auto; margin-bottom: 4px;
+  }
+  .sql-kw  { color: #ff7b72; }
+  .sql-fn  { color: #79c0ff; }
+  .sql-cmt { color: #6e7681; }
+  .sql-num { color: #f2cc60; }
+
+  /* ── Stat callouts ── */
+  .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat-card {
+    background: var(--surface2); border: none;
+    border-radius: 10px; padding: 12px 14px;
+    transition: border-color .7s cubic-bezier(0.4,0,0.2,1), background .7s cubic-bezier(0.4,0,0.2,1);
+  }
+  .stat-card.good { border-color: var(--green); background: var(--green-bg); }
+  .stat-card.bad  { border-color: var(--red);   background: var(--red-bg); }
+  .stat-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+  .stat-card.good .stat-label { color: var(--green); }
+  .stat-card.bad  .stat-label { color: var(--red); }
+  .stat-val   { font-size: 22px; font-weight: 600; font-family: var(--font-mono); color: var(--text); }
+  .stat-card.good .stat-val { color: var(--green); }
+  .stat-card.bad  .stat-val { color: var(--red); }
+  .stat-unit  { font-size: 11px; color: var(--muted); }
+  .stat-note  { font-size: 10px; color: var(--faint); margin-top: 4px; }
+  .stat-card.good .stat-note { color: var(--green); opacity: .8; }
+  .stat-card.bad  .stat-note { color: var(--red);   opacity: .8; }
+
+  /* ── Verdict banner ── */
+  .verdict {
+    border-radius: 10px; padding: 14px 16px;
+    display: flex; align-items: flex-start; gap: 12px;
+    font-size: 13px; line-height: 1.5;
+  }
+  .verdict.success { background: var(--green-bg); border: none; color: var(--green); }
+  .verdict.fail    { background: var(--red-bg);   border: 1px solid rgba(224,62,62,.3);  color: var(--red); }
+  .verdict-icon { font-size: 20px; flex-shrink: 0; }
+  .verdict-title { font-weight: 600; font-size: 14px; margin-bottom: 3px; }
+  .verdict-body  { font-size: 12px; opacity: .85; }
+
+  /* ── Shard diagram (reused for architecture diagrams) ── */
+  .shard-svg { display: block; width: 100%; }
+
+  /* ── Micro diagram ── */
+  .micro-svg { display: block; width: 100%; }
+
+  /* ── Footer nav ── */
+  .footer {
+    padding: 14px 24px;
+    border-top: none;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    flex-wrap: wrap;
+  }
+  .footer-left  { display: flex; gap: 8px; flex-wrap: wrap; }
+  .footer-right { display: flex; gap: 8px; }
+
+  .btn {
+    font-family: var(--font-ui); font-size: 12px; font-weight: 500;
+    padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    border: none; background: var(--surface2); color: var(--text);
+    transition: all .35s cubic-bezier(0.4,0,0.2,1); display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: #edf0f5; border-color: var(--border2); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+  .btn.green  { background: var(--green-bg);  border-color: rgba(24,168,100,.4);  color: var(--green); }
+  .btn.red    { background: var(--red-bg);    border-color: rgba(224,62,62,.4);   color: var(--red); }
+  .btn.blue   { background: var(--blue-bg);   border-color: rgba(26,127,232,.4);  color: var(--blue); }
+  .btn.purple { background: var(--purple-bg); border-color: rgba(124,58,237,.4);  color: var(--purple); }
+  .btn.amber  { background: var(--amber-bg);  border-color: rgba(217,123,16,.5);  color: var(--amber); }
+  .btn.ghost  { background: transparent; border-color: var(--border); color: var(--muted); }
+
+  /* ── Concepts (last screen) ── */
+  .concepts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .concept-card {
+    background: var(--surface2); border: none;
+    border-radius: 10px; padding: 12px;
+  }
+  .concept-icon { font-size: 18px; margin-bottom: 6px; }
+  .concept-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+  }
+  .concept-body { font-size: 11px; color: var(--faint); line-height: 1.5; }
+
+  /* ── Divider ── */
+  .divider { height: 1px; background: transparent; margin: 14px 0; }
+
+  /* ── Tag pill inline ── */
+  .pill {
+    display: inline-flex; align-items: center;
+    font-family: var(--font-mono); font-size: 9px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px; vertical-align: middle; margin-left: 4px;
+  }
+  .pill.green  { background: var(--green-bg);  color: var(--green); }
+  .pill.red    { background: var(--red-bg);    color: var(--red); }
+  .pill.blue   { background: var(--blue-bg);   color: var(--blue); }
+  .pill.purple { background: var(--purple-bg); color: var(--purple); }
+
+  /* ── Intro screen (screen-0) — light theme ── */
+  .intro-screen {
+    background: var(--surface);
+    padding: 20px 24px 18px;
+    position: relative;
+  }
+  .intro-series-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: 9px; font-weight: 500;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--blue); background: var(--blue-bg);
+    border: none; border-radius: 20px;
+    padding: 3px 10px; margin-bottom: 12px;
+  }
+  .intro-series-tag .dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--blue); animation: pulse 1.6s ease-in-out infinite;
+  }
+  .intro-headline {
+    font-size: 19px; font-weight: 700; line-height: 1.25;
+    color: var(--text); margin-bottom: 4px; letter-spacing: -.01em;
+  }
+  .intro-headline span { color: var(--blue); }
+  .intro-subline {
+    font-size: 12px; color: var(--muted);
+    margin-bottom: 14px; line-height: 1.5;
+  }
+  .intro-cards {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    margin-bottom: 12px;
+  }
+  .intro-card {
+    background: var(--surface2);
+    border: none;
+    border-radius: 10px; padding: 10px 12px;
+    transition: border-color .2s;
+    position: relative; overflow: hidden;
+  }
+  .intro-card::after {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--card-glow, var(--blue)), transparent);
+    border-radius: 10px 10px 0 0;
+  }
+  .intro-card-icon { font-size: 18px; margin-bottom: 5px; display: block; }
+  .intro-card-title {
+    font-size: 11.5px; font-weight: 600; color: var(--text);
+    margin-bottom: 3px; line-height: 1.2;
+  }
+  .intro-card-text {
+    font-size: 10px; color: var(--muted);
+    line-height: 1.5;
+  }
+  .intro-inspiration {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--green-bg);
+    border: none;
+    border-left: 3px solid var(--green);
+    border-radius: 10px; padding: 11px 13px;
+    margin-bottom: 12px;
+  }
+  .intro-insp-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+  .intro-insp-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: .07em; text-transform: uppercase;
+    color: var(--green); margin-bottom: 4px;
+  }
+  .intro-insp-text {
+    font-size: 11px; color: var(--muted);
+    line-height: 1.55;
+  }
+  .intro-footer-row {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 8px;
+  }
+  .intro-footer-left { display: flex; flex-direction: column; gap: 2px; }
+  .intro-series-name {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+    letter-spacing: .08em; color: var(--text); text-transform: uppercase;
+  }
+  .intro-series-meta {
+    font-family: var(--font-mono); font-size: 9px;
+    color: var(--faint); letter-spacing: .05em;
+  }
+  .intro-start-btn {
+    font-family: var(--font-ui); font-size: 12px; font-weight: 600;
+    padding: 8px 18px; border-radius: 8px; cursor: pointer;
+    border: none;
+    background: var(--blue); color: #fff;
+    display: flex; align-items: center; gap: 6px;
+    transition: opacity .15s; white-space: nowrap;
+  }
+  .intro-start-btn:hover { opacity: .88; }
+
+  /* Card accent colours */
+  .intro-card:nth-child(1) { --card-glow: var(--blue); }
+  .intro-card:nth-child(2) { --card-glow: var(--purple); }
+  .intro-card:nth-child(3) { --card-glow: var(--green); }
+  .intro-card:nth-child(4) { --card-glow: var(--amber); }
+
+  /* Narrator — light theme on intro */
+  .narrator-dark {
+    padding: 9px 13px; margin-bottom: 12px;
+    background: var(--blue-bg); border: none;
+    border-radius: 10px; font-size: 12px; color: var(--blue); line-height: 1.5;
+    display: none; align-items: flex-start; gap: 8px;
+  }
+  .narrator-dark.visible { display: flex; }
+
+  /* ── Dynamic header transitions ── */
+  .header h1 { transition: opacity .65s cubic-bezier(0.4,0,0.2,1), transform .65s cubic-bezier(0.4,0,0.2,1); }
+  .header p  { transition: opacity .65s cubic-bezier(0.4,0,0.2,1), transform .65s cubic-bezier(0.4,0,0.2,1); }
+  .header h1.fading, .header p.fading { opacity: 0; transform: translateY(-4px); }
+  .module-num { transition: opacity .5s ease; }
+  .module-num.fading { opacity: 0; }
+
+  /* ── Intro card staggered entry ── */
+  @keyframes cardEntry {
+    from { opacity: 0; transform: translateY(28px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .intro-card.animating {
+    opacity: 0;
+    animation: cardEntry 1.6s cubic-bezier(0.22,0.61,0.36,1) forwards;
+  }
+  .intro-card.animating:nth-child(1) { animation-delay: .15s; }
+  .intro-card.animating:nth-child(2) { animation-delay: .45s; }
+  .intro-card.animating:nth-child(3) { animation-delay: .75s; }
+  .intro-card.animating:nth-child(4) { animation-delay: 1.05s; }
+
+  @keyframes inspEntry {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .intro-inspiration.animating {
+    opacity: 0;
+    animation: inspEntry 1s cubic-bezier(0.22,0.61,0.36,1) 1.35s forwards;
+  }
+
+  /* ── Screen slide-out transition ── */
+  @keyframes slideOut {
+    from { opacity: 1; transform: translateX(0); }
+    to   { opacity: 0; transform: translateX(-28px); }
+  }
+  .screen.sliding-out {
+    display: block !important;
+    animation: slideOut .7s cubic-bezier(0.4,0,1,1) forwards;
+    pointer-events: none;
+  }
+
+  /* ── Screen slide-in (override default fadeIn for post-intro) ── */
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(28px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .screen.slide-in {
+    animation: slideIn .8s cubic-bezier(0.22,0.61,0.36,1) forwards !important;
+  }
+
+  /* ── Cinematic transition overlay ── */
+  #cinematic-overlay {
+    position: fixed; inset: 0; z-index: 9999;
+    background: var(--surface);
+    opacity: 0; pointer-events: none;
+    transition: opacity .7s cubic-bezier(0.4,0,0.2,1);
+  }
+  #cinematic-overlay.fade-in  { opacity: 1; pointer-events: all; }
+  #cinematic-overlay.fade-out { opacity: 0; pointer-events: none; }
+
+  /* ── Comparison table (deep dive) ── */
+  .partition-table {
+    width: 100%; border-collapse: collapse;
+    font-family: var(--font-mono); font-size: 10.5px;
+    margin-bottom: 12px;
+  }
+  .partition-table th {
+    padding: 7px 12px; text-align: left;
+    background: var(--surface2); color: var(--muted);
+    border: none; font-weight: 500;
+    text-transform: uppercase; letter-spacing: .06em; font-size: 9px;
+  }
+  .partition-table td {
+    padding: 8px 12px; border: none;
+    color: var(--text); vertical-align: top; line-height: 1.5;
+    transition: background .5s ease, color .5s ease;
+  }
+  .partition-table tr.highlight-row td {
+    background: var(--blue-bg); color: var(--blue);
+  }
+  .partition-table tr.good-row td { background: var(--green-bg); color: var(--green); }
+  .partition-table tr.bad-row  td { background: var(--red-bg);   color: var(--red); }
+  .partition-table td:first-child { font-weight: 500; color: var(--muted); font-size: 9.5px; white-space: nowrap; }
+
 </style>
 </head>
 <body>
+<div id="cinematic-overlay"></div>
+<div class="card">
 
-<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
-<defs>
-  <filter id="sketchy" x="-20%" y="-20%" width="140%" height="140%">
-    <feTurbulence type="fractalNoise" baseFrequency="0.045 0.06" numOctaves="2" seed="7" result="noise"/>
-    <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.2"/>
-  </filter>
-  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-    <path d="M2 1L8 5L2 9" fill="none" stroke="#241f3d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-  </marker>
-
-  <symbol id="icon-upload" viewBox="0 0 24 24">
-    <path d="M12 4 L12 15 M7 9 L12 4 L17 9" fill="none" stroke="#241f3d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M4 17 L4 20 L20 20 L20 17" fill="none" stroke="#241f3d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-  </symbol>
-  <symbol id="icon-bucket" viewBox="0 0 24 24">
-    <path d="M3 6 Q12 2 21 6" fill="none" stroke="#241f3d" stroke-width="1.8" stroke-linecap="round"/>
-    <path d="M4 6 L7 21 L17 21 L20 6" fill="none" stroke="#241f3d" stroke-width="1.8" stroke-linejoin="round"/>
-  </symbol>
-  <symbol id="icon-bell" viewBox="0 0 24 24">
-    <path d="M12 3 C9.2 3 8 6 8 9 C8 13 6 14 6 16 L18 16 C18 14 16 13 16 9 C16 6 14.8 3 12 3 Z" fill="none" stroke="#241f3d" stroke-width="1.8" stroke-linejoin="round"/>
-    <path d="M10 18.5 Q12 21 14 18.5" fill="none" stroke="#241f3d" stroke-width="1.8" stroke-linecap="round"/>
-  </symbol>
-  <symbol id="icon-queue" viewBox="0 0 24 24">
-    <rect x="4" y="4.5" width="16" height="4" rx="1.8" fill="none" stroke="#241f3d" stroke-width="1.6"/>
-    <rect x="4" y="10" width="16" height="4" rx="1.8" fill="none" stroke="#241f3d" stroke-width="1.6"/>
-    <rect x="4" y="15.5" width="16" height="4" rx="1.8" fill="none" stroke="#241f3d" stroke-width="1.6"/>
-  </symbol>
-  <symbol id="icon-chip" viewBox="0 0 24 24">
-    <rect x="6" y="6" width="12" height="12" rx="2" fill="none" stroke="#241f3d" stroke-width="1.8"/>
-    <path d="M9 6V3M15 6V3M9 21V18M15 21V18M6 9H3M6 15H3M21 9H18M21 15H18" fill="none" stroke="#241f3d" stroke-width="1.6" stroke-linecap="round"/>
-  </symbol>
-  <symbol id="icon-film" viewBox="0 0 24 24">
-    <rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="#241f3d" stroke-width="1.8"/>
-    <path d="M8.5 6V18M15.5 6V18" fill="none" stroke="#241f3d" stroke-width="1.5"/>
-  </symbol>
-  <symbol id="icon-cloud" viewBox="0 0 24 24">
-    <path d="M7 17 Q3 17 3 13.2 Q3 10.2 6.2 9.7 Q6.8 6 10.3 6 Q13.3 6 14.3 8.6 Q17.3 8.1 18.8 10.6 Q21.5 11 21.5 14 Q21.5 17 17.3 17 Z" fill="none" stroke="#241f3d" stroke-width="1.8" stroke-linejoin="round"/>
-  </symbol>
-  <symbol id="icon-phone" viewBox="0 0 24 24">
-    <rect x="7.5" y="2.5" width="9" height="19" rx="2" fill="none" stroke="#241f3d" stroke-width="1.8"/>
-    <line x1="10" y1="19" x2="14" y2="19" stroke="#241f3d" stroke-width="1.8" stroke-linecap="round"/>
-  </symbol>
-  <symbol id="icon-laptop" viewBox="0 0 24 24">
-    <rect x="3.5" y="4.5" width="17" height="11" rx="1.5" fill="none" stroke="#241f3d" stroke-width="1.8"/>
-    <path d="M1.5 18.5 L22.5 18.5 L20.5 15.5 L3.5 15.5 Z" fill="none" stroke="#241f3d" stroke-width="1.8" stroke-linejoin="round"/>
-  </symbol>
-  <symbol id="icon-tv" viewBox="0 0 24 24">
-    <rect x="3" y="4" width="18" height="12" rx="1.5" fill="none" stroke="#241f3d" stroke-width="1.8"/>
-    <line x1="9" y1="20" x2="15" y2="20" stroke="#241f3d" stroke-width="1.8" stroke-linecap="round"/>
-    <line x1="12" y1="16" x2="12" y2="20" stroke="#241f3d" stroke-width="1.8" stroke-linecap="round"/>
-  </symbol>
-  <symbol id="icon-masterfile" viewBox="0 0 24 24">
-    <path d="M6 2 H15 L20 7 V20 A2 2 0 0 1 18 22 H6 A2 2 0 0 1 4 20 V4 A2 2 0 0 1 6 2 Z" fill="none" stroke="#241f3d" stroke-width="1.7" stroke-linejoin="round"/>
-    <path d="M15 2 V7 H20" fill="none" stroke="#241f3d" stroke-width="1.7" stroke-linejoin="round"/>
-    <path d="M9.5 12.5 L9.5 17.5 L14 15 Z" fill="#241f3d"/>
-  </symbol>
-  <symbol id="icon-signal" viewBox="0 0 24 24">
-    <rect x="2" y="15" width="3.4" height="6" rx=".8" fill="#241f3d" stroke="#241f3d" stroke-width="1.2"/>
-    <rect x="8.3" y="11" width="3.4" height="10" rx=".8" fill="none" stroke="#241f3d" stroke-width="1.4" stroke-dasharray="1.6 1.8"/>
-    <rect x="14.6" y="7" width="3.4" height="14" rx=".8" fill="none" stroke="#241f3d" stroke-width="1.4" stroke-dasharray="1.6 1.8"/>
-    <rect x="20.9" y="3" width="2.6" height="18" rx=".8" fill="none" stroke="#241f3d" stroke-width="1.4" stroke-dasharray="1.6 1.8"/>
-  </symbol>
-  <symbol id="icon-blocked" viewBox="0 0 24 24">
-    <circle cx="12" cy="12" r="9" fill="none" stroke="#241f3d" stroke-width="1.8"/>
-    <line x1="6.2" y1="17.8" x2="17.8" y2="6.2" stroke="#241f3d" stroke-width="1.8" stroke-linecap="round"/>
-  </symbol>
-</defs>
-</svg>
-
-<div class="wrap">
-  <h1 class="title">Media pipeline, sketched out</h1>
-  <svg class="underline" width="230" height="14" viewBox="0 0 230 14"><path d="M2,8 Q40,2 80,9 T160,6 T228,10" fill="none" stroke="var(--packet)" stroke-width="3" stroke-linecap="round"/></svg>
-  <p class="intro">three slides: why this exists, how the pipeline works, then a real example. hit play on any of them.</p>
-  <p class="sr-only" id="srSummary">Three slide hand-drawn animated diagram. Slide one shows why the pipeline is needed: a single master 4K file fails to play for a viewer on a weak 4G connection. Slide two shows an eight stage media transcoding pipeline: upload, raw storage, event trigger, queue, worker, render, processed storage, and CDN delivery. Slide three shows a real world example of uploading a Facebook video and how viewers on different devices and networks receive different quality formats.</p>
-
-  <div class="tabs">
-    <button class="tab-btn tab-active" id="tabBtn0" type="button">1 · Why it matters</button>
-    <button class="tab-btn" id="tabBtn1" type="button">2 · Pipeline</button>
-    <button class="tab-btn" id="tabBtn2" type="button">3 · Real-world example</button>
-  </div>
-
-  <!-- ===================== SLIDE 0 : WHY IT MATTERS ===================== -->
-  <div class="scene active" id="s0-scene">
-    <p class="scene-note">one master file, one weak signal — what actually happens?</p>
-    <div class="svg-wrap">
-      <svg class="diagram" viewBox="0 0 900 260" role="img" aria-labelledby="srSummary">
-        <path id="s0-conn-0" class="connector" filter="url(#sketchy)" d="M240,122 Q300,106 360,122" marker-end="url(#arrow)"/>
-        <path id="s0-conn-1" class="connector" filter="url(#sketchy)" d="M540,122 Q600,106 660,122" marker-end="url(#arrow)"/>
-
-        <g id="s0-node-0" class="node c-storage" transform="rotate(-1.2 150 122)">
-          <rect class="halo" x="50" y="80" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="60" y="90" width="180" height="64" rx="14"/>
-          <use href="#icon-masterfile" x="74" y="108" width="28" height="28"/>
-          <circle class="anim anim-pulse" cx="88" cy="131" r="3" fill="var(--packet)"/>
-          <text class="node-title" x="112" y="114" dominant-baseline="central">MASTER FILE</text>
-          <text class="node-sub" x="112" y="134" dominant-baseline="central">one file, full 4K</text>
-        </g>
-
-        <g id="s0-node-1" class="node c-neutral" transform="rotate(1 450 122)">
-          <rect class="halo" x="350" y="80" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="360" y="90" width="180" height="64" rx="14"/>
-          <use href="#icon-phone" x="374" y="108" width="28" height="28"/>
-          <use href="#icon-signal" x="510" y="98" width="16" height="16"/>
-          <circle class="anim anim-pulse" cx="518" cy="106" r="2.6" fill="var(--packet)"/>
-          <text class="node-title" x="412" y="114" dominant-baseline="central">PHONE</text>
-          <text class="node-sub" x="412" y="134" dominant-baseline="central">weak 4G · 1 bar</text>
-        </g>
-
-        <g id="s0-node-2" class="node c-problem" transform="rotate(-.9 750 122)">
-          <rect class="halo" x="650" y="80" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="660" y="90" width="180" height="64" rx="14"/>
-          <circle class="anim anim-spin warn" cx="688" cy="122" r="15" fill="none" stroke="var(--packet)" stroke-width="2" stroke-linecap="round" stroke-dasharray="8 14"/>
-          <use href="#icon-blocked" x="674" y="108" width="28" height="28"/>
-          <text class="node-title" x="712" y="114" dominant-baseline="central">CAN'T PLAY</text>
-          <text class="node-sub" x="712" y="134" dominant-baseline="central">stuck buffering</text>
-        </g>
-
-        <circle id="s0-packet" class="packet" cx="0" cy="0" r="9" filter="url(#sketchy)" style="transform:translate(150px,122px)"/>
-      </svg>
+  <!-- ── Header ── -->
+  <div class="header">
+    <div class="header-left">
+      <div class="tag">🎬 Engineering Refresh</div>
+      <h1 id="header-title">Media Processing &amp; Storage</h1>
+      <p id="header-sub">From a single upload to multiple renditions, delivered from the edge — and what breaks without a pipeline.</p>
     </div>
-
-    <div class="caption-card">
-      <span class="stage-label" id="s0-capIndex">stage 1 / 3</span>
-      <p class="caption-text" id="s0-capText">Click Play to start the narrated walkthrough.</p>
-      <div class="progress-track"><div class="progress-fill" id="s0-progressFill"></div></div>
-    </div>
-    <div class="controls">
-      <button id="s0-playBtn">Play</button>
-      <button id="s0-restartBtn">Restart</button>
-      <select id="s0-voiceSelect" aria-label="Narration voice"></select>
-      <label class="check-label"><input type="checkbox" id="s0-capOnlyChk"> captions only (no voice)</label>
-    </div>
-
-    <div class="why-card">
-      <span class="stage-label">Why this system exists</span>
-      <p class="why-text">A phone on a strong connection can happily pull down a 4K file. A phone on one bar of 4G can't — and it shouldn't have to. If a service only ever stores and serves a single master rendition, every low-bandwidth viewer either stalls out or can't watch at all. A transcoding pipeline fixes this by producing several smaller renditions ahead of time, so each device gets handed the one that actually fits its connection. That's the problem the next two tabs solve.</p>
+    <div class="header-right">
+      <div class="module-num" id="module-num">Chapter 08</div>
+      <div class="audio-ctrl on" id="audio-ctrl" onclick="toggleAudio()">
+        <div class="audio-dot" style="background:var(--blue);animation:pulse 1.2s ease-in-out infinite"></div>
+        <span id="audio-label">Audio on</span>
+      </div>
     </div>
   </div>
 
-  <!-- ===================== SLIDE 1 : PIPELINE ===================== -->
-  <div class="scene" id="s1-scene">
-    <p class="scene-note">upload → raw storage → async transcode → deliver.</p>
-    <div class="svg-wrap">
-      <svg class="diagram" viewBox="0 0 1000 400" role="img" aria-labelledby="srSummary">
-        <path id="s1-conn-0" class="connector" filter="url(#sketchy)" d="M220,122 Q250,110 281,122" marker-end="url(#arrow)"/>
-        <path id="s1-conn-1" class="connector" filter="url(#sketchy)" d="M467,122 Q497,110 528,122" marker-end="url(#arrow)"/>
-        <path id="s1-conn-2" class="connector" filter="url(#sketchy)" d="M714,122 Q745,110 775,122" marker-end="url(#arrow)"/>
-        <path id="s1-conn-3" class="connector" filter="url(#sketchy)" d="M871,154 Q884,219 871,284" marker-end="url(#arrow)"/>
-        <path id="s1-conn-4" class="connector" filter="url(#sketchy)" d="M781,322 Q750,334 720,322" marker-end="url(#arrow)"/>
-        <path id="s1-conn-5" class="connector" filter="url(#sketchy)" d="M534,322 Q503,334 473,322" marker-end="url(#arrow)"/>
-        <path id="s1-conn-6" class="connector" filter="url(#sketchy)" d="M287,322 Q256,334 226,322" marker-end="url(#arrow)"/>
+  <!-- ── Step progress ── -->
+  <div class="progress-bar" id="progress-bar">
+    <div class="prog-step active" id="prog-0">Purpose</div>
+    <div class="prog-step"        id="prog-1">1 · Upload</div>
+    <div class="prog-step"        id="prog-2">2 · Small Scale</div>
+    <div class="prog-step"        id="prog-3">3 · Weak Signal</div>
+    <div class="prog-step"        id="prog-4">4 · Pipeline</div>
+    <div class="prog-step"        id="prog-5">5 · Delivery</div>
+    <div class="prog-step"        id="prog-6">6 · Summary</div>
+  </div>
 
-        <g id="s1-node-0" class="node c-neutral" transform="rotate(-1.4 130 122)">
-          <rect class="halo" x="30" y="80" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="40" y="90" width="180" height="64" rx="14"/>
-          <use href="#icon-upload" x="54" y="108" width="28" height="28"/>
-          <circle class="anim anim-flowup" cx="68.0" cy="131.0" r="3.6" fill="var(--packet)"/>
-          <text class="node-title" x="92" y="114" dominant-baseline="central">UPLOAD</text>
-          <text class="node-sub" x="92" y="134" dominant-baseline="central">no AWS (client)</text>
-        </g>
-        <g id="s1-node-1" class="node c-storage" transform="rotate(1 377 122)">
-          <rect class="halo" x="277" y="80" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="287" y="90" width="180" height="64" rx="14"/>
-          <use href="#icon-bucket" x="301" y="108" width="28" height="28"/>
-          <rect class="anim anim-flowdown" x="311.0" y="110.0" width="8" height="7" rx="1.5" fill="var(--packet)"/>
-          <text class="node-title" x="339" y="114" dominant-baseline="central">S3 : RAW</text>
-          <text class="node-service" x="339" y="134" dominant-baseline="central">Amazon S3</text>
-        </g>
-        <g id="s1-node-2" class="node c-neutral" transform="rotate(-.8 624 122)">
-          <rect class="halo" x="524" y="80" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="534" y="90" width="180" height="64" rx="14"/>
-          <use href="#icon-bell" x="548" y="108" width="28" height="28"/>
-          <circle class="anim anim-ring" cx="562.0" cy="120.0" r="9" fill="none" stroke="var(--packet)" stroke-width="2"/>
-          <circle class="anim anim-ring d2" cx="562.0" cy="120.0" r="9" fill="none" stroke="var(--packet)" stroke-width="2"/>
-          <text class="node-title" x="586" y="114" dominant-baseline="central">S3 EVENT</text>
-          <text class="node-service" x="586" y="134" dominant-baseline="central">S3 Notifications</text>
-        </g>
-        <g id="s1-node-3" class="node c-neutral" transform="rotate(1.3 871 122)">
-          <rect class="halo" x="771" y="80" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="781" y="90" width="180" height="64" rx="14"/>
-          <use href="#icon-queue" x="795" y="108" width="28" height="28"/>
-          <circle class="anim anim-q q1" cx="800.0" cy="133.0" r="2.6" fill="var(--packet)"/>
-          <circle class="anim anim-q q2" cx="809.0" cy="133.0" r="2.6" fill="var(--packet)"/>
-          <circle class="anim anim-q q3" cx="818.0" cy="133.0" r="2.6" fill="var(--packet)"/>
-          <text class="node-title" x="833" y="114" dominant-baseline="central">QUEUE</text>
-          <text class="node-service" x="833" y="134" dominant-baseline="central">Amazon SQS</text>
-        </g>
-        <g id="s1-node-4" class="node c-compute" transform="rotate(-1.1 871 322)">
-          <rect class="halo" x="771" y="280" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="781" y="290" width="180" height="64" rx="14"/>
-          <use href="#icon-chip" x="795" y="308" width="28" height="28"/>
-          <circle class="anim anim-spin" cx="809.0" cy="322.0" r="15" fill="none" stroke="var(--packet)" stroke-width="2" stroke-linecap="round" stroke-dasharray="8 14"/>
-          <text class="node-title" x="833" y="314" dominant-baseline="central">WORKER</text>
-          <text class="node-service" x="833" y="334" dominant-baseline="central">AWS Lambda</text>
-        </g>
-        <g id="s1-node-5" class="node c-compute" transform="rotate(.9 624 322)">
-          <rect class="halo" x="524" y="280" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="534" y="290" width="180" height="64" rx="14"/>
-          <use href="#icon-film" x="548" y="308" width="28" height="28"/>
-          <rect class="anim anim-scan" x="560.0" y="309.0" width="4" height="26" rx="2" fill="var(--packet)"/>
-          <text class="node-title" x="586" y="314" dominant-baseline="central">RENDER</text>
-          <text class="node-service" x="586" y="334" dominant-baseline="central">MediaConvert</text>
-        </g>
-        <g id="s1-node-6" class="node c-storage" transform="rotate(-1.3 377 322)">
-          <rect class="halo" x="277" y="280" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="287" y="290" width="180" height="64" rx="14"/>
-          <use href="#icon-bucket" x="301" y="308" width="28" height="28"/>
-          <rect class="anim anim-flowdown" x="311.0" y="310.0" width="8" height="7" rx="1.5" fill="var(--packet)"/>
-          <text class="node-title" x="339" y="314" dominant-baseline="central">S3 : OUT</text>
-          <text class="node-service" x="339" y="334" dominant-baseline="central">Amazon S3</text>
-        </g>
-        <g id="s1-node-7" class="node c-delivery" transform="rotate(1.1 130 322)">
-          <rect class="halo" x="30" y="280" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="40" y="290" width="180" height="64" rx="14"/>
-          <use href="#icon-cloud" x="54" y="308" width="28" height="28"/>
-          <circle class="anim anim-ring" cx="68.0" cy="322.0" r="12" fill="none" stroke="var(--packet)" stroke-width="2"/>
-          <circle class="anim anim-ring d2" cx="68.0" cy="322.0" r="12" fill="none" stroke="var(--packet)" stroke-width="2"/>
-          <text class="node-title" x="92" y="314" dominant-baseline="central">CDN</text>
-          <text class="node-service" x="92" y="334" dominant-baseline="central">CloudFront</text>
-        </g>
+  <!-- ════════════════════════════════════
+       SCREEN 0 — Purpose / Intro
+  ═════════════════════════════════════ -->
+  <div class="screen active" id="screen-0">
+    <div class="intro-screen">
 
-        <circle id="s1-packet" class="packet" cx="0" cy="0" r="9" filter="url(#sketchy)" style="transform:translate(130px,122px)"/>
-      </svg>
-    </div>
+      <div class="narrator-dark" id="narrator"><div class="narrator-icon" style="font-size:15px;flex-shrink:0">🎙</div><div><span id="narrator-text"></span><span class="speaking-dots" id="speaking-dots" style="display:none"><span></span><span></span><span></span></span></div></div>
 
-    <div class="caption-card">
-      <span class="stage-label" id="s1-capIndex">stage 1 / 8</span>
-      <p class="caption-text" id="s1-capText">Click Play to start the narrated walkthrough.</p>
-      <div class="progress-track"><div class="progress-fill" id="s1-progressFill"></div></div>
-    </div>
-    <div class="controls">
-      <button id="s1-playBtn">Play</button>
-      <button id="s1-restartBtn">Restart</button>
-      <select id="s1-voiceSelect" aria-label="Narration voice"></select>
-      <label class="check-label"><input type="checkbox" id="s1-capOnlyChk"> captions only (no voice)</label>
+      <!-- 4 concept cards -->
+      <div class="intro-cards">
+        <div class="intro-card">
+          <span class="intro-card-icon">🎥</span>
+          <div class="intro-card-title">One File, Many Viewers</div>
+          <div class="intro-card-text">A video isn't watched by one person on one device. It's phones, laptops, TVs — every network imaginable.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">⚙️</span>
+          <div class="intro-card-title">Processing Happens Async</div>
+          <div class="intro-card-text">Encoding takes real compute time. Uploads should succeed instantly — processing happens behind the scenes.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">📶</span>
+          <div class="intro-card-title">Networks Aren't Equal</div>
+          <div class="intro-card-text">Fiber at home. One bar on a train. The same file can't serve both — quality has to adapt.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">🌍</span>
+          <div class="intro-card-title">Distance Costs Time</div>
+          <div class="intro-card-text">A single origin server is slow for viewers far away. Content has to live close to where it's watched.</div>
+        </div>
+      </div>
+
+      <!-- Inspiration callout -->
+      <div class="intro-inspiration">
+        <div class="intro-insp-icon">🚀</div>
+        <div class="intro-insp-body">
+          <div class="intro-insp-title">First inspiration point</div>
+          <div class="intro-insp-text">We begin with something almost everyone does today: upload a short video from a phone. What looks instant on the surface hides an entire pipeline of storage, encoding, and delivery working behind the scenes.</div>
+        </div>
+      </div>
+
     </div>
   </div>
 
-  <!-- ===================== SLIDE 2 : REAL WORLD EXAMPLE ===================== -->
-  <div class="scene" id="s2-scene">
-    <p class="scene-note">a Facebook video upload. Facebook runs its own infrastructure, not AWS — the orange tags show the closest AWS equivalent for each step.</p>
-    <div class="svg-wrap">
-      <svg class="diagram" viewBox="0 0 1000 580" role="img" aria-labelledby="srSummary">
-        <path id="s2-conn-0" class="connector" filter="url(#sketchy)" d="M220,122 Q250,110 281,122" marker-end="url(#arrow)"/>
-        <path id="s2-conn-1" class="connector" filter="url(#sketchy)" d="M467,122 Q497,110 528,122" marker-end="url(#arrow)"/>
-        <path id="s2-conn-2" class="connector" filter="url(#sketchy)" d="M714,122 Q745,110 775,122" marker-end="url(#arrow)"/>
-        <path id="s2-conn-3" class="connector" filter="url(#sketchy)" d="M871,154 Q884,219 871,284" marker-end="url(#arrow)"/>
-        <path id="s2-conn-4" class="connector" filter="url(#sketchy)" d="M871,354 Q550,395 160,470" marker-end="url(#arrow)"/>
-        <path id="s2-conn-5" class="connector" filter="url(#sketchy)" d="M871,354 Q700,430 500,470" marker-end="url(#arrow)"/>
-        <path id="s2-conn-6" class="connector" filter="url(#sketchy)" d="M871,354 Q860,410 840,470" marker-end="url(#arrow)"/>
+  <!-- ════════════════════════════════════
+       SCREEN 1 — The naive upload
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-1">
+    <div class="narrator" id="narrator-1"><div class="narrator-icon">🎙</div><div><span id="narrator-text-1"></span><span class="speaking-dots" id="speaking-dots-1" style="display:none"><span></span><span></span><span></span></span></div></div>
 
-        <g id="s2-node-0" class="node c-neutral" transform="rotate(-1.4 130 122)">
-          <rect class="halo" x="30" y="80" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="40" y="90" width="180" height="64" rx="14"/>
-          <use href="#icon-upload" x="54" y="108" width="28" height="28"/>
-          <circle class="anim anim-flowup" cx="68.0" cy="131.0" r="3.6" fill="var(--packet)"/>
-          <text class="node-title" x="92" y="114" dominant-baseline="central">UPLOAD</text>
-          <text class="node-sub" x="92" y="134" dominant-baseline="central">no AWS (client)</text>
-        </g>
-        <g id="s2-node-1" class="node c-storage" transform="rotate(1 377 122)">
-          <rect class="halo" x="277" y="80" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="287" y="90" width="180" height="64" rx="14"/>
-          <use href="#icon-bucket" x="301" y="108" width="28" height="28"/>
-          <rect class="anim anim-flowdown" x="311.0" y="110.0" width="8" height="7" rx="1.5" fill="var(--packet)"/>
-          <text class="node-title" x="339" y="114" dominant-baseline="central">FB : RAW</text>
-          <text class="node-service" x="339" y="134" dominant-baseline="central">≈ Amazon S3</text>
-        </g>
-        <g id="s2-node-2" class="node c-compute" transform="rotate(-.8 624 122)">
-          <rect class="halo" x="524" y="80" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="534" y="90" width="180" height="64" rx="14"/>
-          <use href="#icon-chip" x="548" y="108" width="28" height="28"/>
-          <circle class="anim anim-spin" cx="562.0" cy="122.0" r="15" fill="none" stroke="var(--packet)" stroke-width="2" stroke-linecap="round" stroke-dasharray="8 14"/>
-          <text class="node-title" x="586" y="114" dominant-baseline="central">TRANSCODE</text>
-          <text class="node-service" x="586" y="134" dominant-baseline="central">≈ MediaConvert</text>
-        </g>
-        <g id="s2-node-3" class="node c-compute" transform="rotate(1.3 871 122)">
-          <rect class="halo" x="771" y="80" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="781" y="90" width="180" height="64" rx="14"/>
-          <use href="#icon-film" x="795" y="108" width="28" height="28"/>
-          <rect class="anim anim-scan" x="807.0" y="109.0" width="4" height="26" rx="2" fill="var(--packet)"/>
-          <text class="node-title" x="833" y="114" dominant-baseline="central">FORMATS</text>
-          <text class="node-service" x="833" y="134" dominant-baseline="central">≈ S3, 240p-1080p</text>
-        </g>
-        <g id="s2-node-4" class="node c-delivery" transform="rotate(-1.1 871 322)">
-          <rect class="halo" x="771" y="280" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="781" y="290" width="180" height="64" rx="14"/>
-          <use href="#icon-cloud" x="795" y="308" width="28" height="28"/>
-          <circle class="anim anim-ring" cx="809.0" cy="322.0" r="12" fill="none" stroke="var(--packet)" stroke-width="2"/>
-          <circle class="anim anim-ring d2" cx="809.0" cy="322.0" r="12" fill="none" stroke="var(--packet)" stroke-width="2"/>
-          <text class="node-title" x="833" y="314" dominant-baseline="central">CDN EDGE</text>
-          <text class="node-service" x="833" y="334" dominant-baseline="central">≈ CloudFront</text>
-        </g>
-        <g id="s2-node-5" class="node c-neutral" transform="rotate(1.2 160 502)">
-          <rect class="halo" x="60" y="460" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="70" y="470" width="180" height="64" rx="14"/>
-          <use href="#icon-phone" x="84" y="488" width="28" height="28"/>
-          <path class="anim anim-play" d="M94.5,497.0 L94.5,507.0 L103.0,502.0 Z" fill="var(--packet)"/>
-          <text class="node-title" x="122" y="494" dominant-baseline="central">PHONE</text>
-          <text class="node-sub" x="122" y="514" dominant-baseline="central">480p on 4G</text>
-        </g>
-        <g id="s2-node-6" class="node c-neutral" transform="rotate(-.9 500 502)">
-          <rect class="halo" x="400" y="460" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="410" y="470" width="180" height="64" rx="14"/>
-          <use href="#icon-laptop" x="424" y="488" width="28" height="28"/>
-          <path class="anim anim-play" d="M434.5,497.0 L434.5,507.0 L443.0,502.0 Z" fill="var(--packet)"/>
-          <text class="node-title" x="462" y="494" dominant-baseline="central">LAPTOP</text>
-          <text class="node-sub" x="462" y="514" dominant-baseline="central">1080p on wifi</text>
-        </g>
-        <g id="s2-node-7" class="node c-neutral" transform="rotate(1.1 840 502)">
-          <rect class="halo" x="740" y="460" width="200" height="84" rx="16"/>
-          <rect class="node-box" filter="url(#sketchy)" x="750" y="470" width="180" height="64" rx="14"/>
-          <use href="#icon-tv" x="764" y="488" width="28" height="28"/>
-          <path class="anim anim-play" d="M774.5,497.0 L774.5,507.0 L783.0,502.0 Z" fill="var(--packet)"/>
-          <text class="node-title" x="802" y="494" dominant-baseline="central">SMART TV</text>
-          <text class="node-sub" x="802" y="514" dominant-baseline="central">4K on fiber</text>
-        </g>
+    <div class="screen-title">The Upload — One File, Stored As-Is</div>
+    <div class="screen-sub">A user uploads a video. Today, the app just saves the original file and serves that exact file back to anyone who watches it.</div>
 
-        <circle id="s2-packet" class="packet" cx="0" cy="0" r="9" filter="url(#sketchy)" style="transform:translate(130px,122px)"/>
+    <div style="margin-bottom:4px">
+      <svg class="shard-svg" viewBox="0 0 652 100" xmlns="http://www.w3.org/2000/svg">
+        <rect id="sc1-client" x="20" y="20" width="96" height="50" rx="10" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="68" y="38" text-anchor="middle" font-size="19" dominant-baseline="central">📱</text>
+        <text x="68" y="59" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="10" fill="#5a6478">Uploader</text>
+        <line id="sc1-line1" x1="116" y1="45" x2="156" y2="45" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+        <rect id="sc1-server" x="156" y="20" width="110" height="50" rx="10" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="211" y="38" text-anchor="middle" font-size="19" dominant-baseline="central">🖥</text>
+        <text x="211" y="59" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="10" fill="#5a6478">App Server</text>
+        <line id="sc1-line2" x1="266" y1="45" x2="306" y2="45" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+        <rect id="sc1-disk" x="306" y="12" width="326" height="66" rx="10" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="344" y="40" text-anchor="middle" font-size="19" dominant-baseline="central">💾</text>
+        <text x="482" y="35" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10.5" fill="#1a1f2e">video_original.mp4</text>
+        <text x="482" y="53" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#9aa3b5">4K · 1.2 GB · the only copy that exists</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 2 — Happy path (wifi)
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-2">
+    <div class="narrator" id="narrator-2"><div class="narrator-icon">🎙</div><div><span id="narrator-text-2"></span><span class="speaking-dots" id="speaking-dots-2" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Playing It Back <span class="pill green">Wifi</span></div>
+    <div class="screen-sub">A friend opens the same video at home, on a solid wifi connection.</div>
+
+    <div class="query-box">
+<span class="sql-cmt">// same server, same file, fast connection</span>
+<span class="sql-kw">GET</span> <span class="sql-fn">/videos/video_original.mp4</span>
+<span class="sql-cmt">// 📶 wifi · 40 Mbps down</span>
+<span class="sql-kw">200 OK</span>  <span class="sql-num">1.2GB</span> streamed directly
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="stats-row" id="stats-sc2">
+      <div class="stat-card" id="sc2-load">
+        <div class="stat-label">Load time</div>
+        <div class="stat-val" id="sc2-load-val">—</div>
+        <div class="stat-note" id="sc2-load-note"></div>
+      </div>
+      <div class="stat-card" id="sc2-quality">
+        <div class="stat-label">Perceived quality</div>
+        <div class="stat-val" id="sc2-quality-val">—</div>
+        <div class="stat-note" id="sc2-quality-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 3 — Breaking point (weak 4G)
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-3">
+    <div class="narrator" id="narrator-3"><div class="narrator-icon">🎙</div><div><span id="narrator-text-3"></span><span class="speaking-dots" id="speaking-dots-3" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Same File — One Bar of 4G <span class="pill red">Breaking</span></div>
+    <div class="screen-sub">Same server. Same file. Nothing about the video changed — only the viewer's connection.</div>
+
+    <div class="query-box">
+<span class="sql-cmt">// same server, same file, weak connection</span>
+<span class="sql-kw">GET</span> <span class="sql-fn">/videos/video_original.mp4</span>
+<span class="sql-cmt">// 📶 1 bar of 4G · ~150 Kbps down</span>
+<span class="sql-kw">200 OK</span>  <span class="sql-num">1.2GB</span> ...still streaming... ⏳
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="stats-row" id="stats-sc3">
+      <div class="stat-card" id="sc3-data">
+        <div class="stat-label">Data required</div>
+        <div class="stat-val" id="sc3-data-val">—</div>
+        <div class="stat-note" id="sc3-data-note"></div>
+      </div>
+      <div class="stat-card" id="sc3-renditions">
+        <div class="stat-label">Smaller renditions available</div>
+        <div class="stat-val" id="sc3-renditions-val">—</div>
+        <div class="stat-note" id="sc3-renditions-note"></div>
+      </div>
+      <div class="stat-card" id="sc3-load">
+        <div class="stat-label">Load time</div>
+        <div class="stat-val" id="sc3-load-val">—</div>
+        <div class="stat-note" id="sc3-load-note"></div>
+      </div>
+      <div class="stat-card" id="sc3-playback">
+        <div class="stat-label">Playback</div>
+        <div class="stat-val" id="sc3-playback-val">—</div>
+        <div class="stat-note" id="sc3-playback-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 4 — The solution: async pipeline
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-4">
+    <div class="narrator" id="narrator-4"><div class="narrator-icon">🎙</div><div><span id="narrator-text-4"></span><span class="speaking-dots" id="speaking-dots-4" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">The Fix — An Async Transcoding Pipeline <span class="pill blue">Solution</span></div>
+    <div class="screen-sub">The upload doesn't change. Everything after it does.</div>
+
+    <!-- Diagram A: upload path — always visible -->
+    <div style="margin-bottom:14px">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">📤 Client Upload → Raw Storage</div>
+      <svg class="shard-svg" viewBox="0 0 652 90" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="24" width="90" height="42" rx="9" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="55" y="40" text-anchor="middle" font-size="16" dominant-baseline="central">📱</text>
+        <text x="55" y="56" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="9.5" fill="#5a6478">Client</text>
+        <line x1="100" y1="45" x2="140" y2="45" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <rect x="140" y="18" width="150" height="54" rx="9" fill="#e8f2fd" stroke="#1a7fe8" stroke-width="1"/>
+        <text x="215" y="34" text-anchor="middle" font-size="13" dominant-baseline="central">🔏</text>
+        <text x="215" y="50" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="9.5" fill="#1a7fe8">Signed Upload URL</text>
+        <text x="215" y="63" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#5a6478">runs on the client</text>
+        <line x1="290" y1="45" x2="330" y2="45" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <rect x="330" y="18" width="150" height="54" rx="9" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="370" y="38" text-anchor="middle" font-size="16" dominant-baseline="central">🗄</text>
+        <text x="415" y="38" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="9.5" fill="#5a6478">Amazon S3</text>
+        <text x="415" y="54" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#9aa3b5">raw bucket</text>
+        <line x1="480" y1="45" x2="520" y2="45" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <rect x="520" y="24" width="122" height="42" rx="9" fill="#fef3e2" stroke="#d97b10" stroke-width="1"/>
+        <text x="560" y="45" text-anchor="middle" font-size="14" dominant-baseline="central">🔔</text>
+        <text x="600" y="45" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="9" fill="#d97b10">S3 event</text>
       </svg>
     </div>
 
-    <div class="caption-card">
-      <span class="stage-label" id="s2-capIndex">stage 1 / 8</span>
-      <p class="caption-text" id="s2-capText">Click Play to start the narrated walkthrough.</p>
-      <div class="progress-track"><div class="progress-fill" id="s2-progressFill"></div></div>
+    <!-- Diagram B: pipeline — hidden until animation reveals it -->
+    <div id="sc4-pipeline2" style="display:none;margin-bottom:14px">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🧩 Queue → Worker → Encode → Deliver</div>
+      <svg class="micro-svg" viewBox="0 0 652 90" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4"   y="24" width="96" height="42" rx="9" fill="#fef3e2" stroke="#d97b10" stroke-width="1"/>
+        <text x="52" y="40" text-anchor="middle" font-size="14" dominant-baseline="central">📬</text>
+        <text x="52" y="56" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="9" fill="#d97b10">SQS Queue</text>
+        <line x1="100" y1="45" x2="132" y2="45" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <rect x="132" y="24" width="96" height="42" rx="9" fill="#e8f2fd" stroke="#1a7fe8" stroke-width="1"/>
+        <text x="180" y="40" text-anchor="middle" font-size="14" dominant-baseline="central">⚙️</text>
+        <text x="180" y="56" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="9" fill="#1a7fe8">Lambda Worker</text>
+        <line x1="228" y1="45" x2="260" y2="45" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <rect x="260" y="18" width="132" height="54" rx="9" fill="#f3f0ff" stroke="#7c3aed" stroke-width="1"/>
+        <text x="326" y="36" text-anchor="middle" font-size="14" dominant-baseline="central">🎞</text>
+        <text x="326" y="53" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="8.8" fill="#7c3aed">MediaConvert</text>
+        <text x="326" y="65" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#5a6478">240p → 4K + thumbnail</text>
+        <line x1="392" y1="45" x2="424" y2="45" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <rect x="424" y="24" width="106" height="42" rx="9" fill="#e6f7f0" stroke="#18a864" stroke-width="1"/>
+        <text x="450" y="40" text-anchor="middle" font-size="14" dominant-baseline="central">🗄</text>
+        <text x="479" y="56" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="8.8" fill="#18a864">Processed S3</text>
+        <line x1="530" y1="45" x2="562" y2="45" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <rect x="562" y="24" width="86" height="42" rx="9" fill="#dceeff" stroke="#1a7fe8" stroke-width="1"/>
+        <text x="590" y="40" text-anchor="middle" font-size="14" dominant-baseline="central">🌍</text>
+        <text x="605" y="56" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="8.8" fill="#1a7fe8">CloudFront</text>
+      </svg>
     </div>
-    <div class="controls">
-      <button id="s2-playBtn">Play</button>
-      <button id="s2-restartBtn">Restart</button>
-      <select id="s2-voiceSelect" aria-label="Narration voice"></select>
-      <label class="check-label"><input type="checkbox" id="s2-capOnlyChk"> captions only (no voice)</label>
+
+    <!-- Performance gain stats — hidden, revealed by animation -->
+    <div class="stats-row" id="sc4-stats" style="display:none">
+      <div class="stat-card" id="sc4-renditions">
+        <div class="stat-label">Renditions produced</div>
+        <div class="stat-val" id="sc4-renditions-val">—</div>
+        <div class="stat-note" id="sc4-renditions-note"></div>
+      </div>
+      <div class="stat-card" id="sc4-load">
+        <div class="stat-label">Weak-signal load time</div>
+        <div class="stat-val" id="sc4-load-val">—</div>
+        <div class="stat-note" id="sc4-load-note"></div>
+      </div>
+      <div class="stat-card" id="sc4-origin">
+        <div class="stat-label">Origin hit per rendition</div>
+        <div class="stat-val" id="sc4-origin-val">—</div>
+        <div class="stat-note" id="sc4-origin-note"></div>
+      </div>
+      <div class="stat-card" id="sc4-master">
+        <div class="stat-label">Master file re-sent</div>
+        <div class="stat-val" id="sc4-master-val">—</div>
+        <div class="stat-note" id="sc4-master-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 5 — Deep dive: adaptive delivery
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-5">
+    <div class="narrator" id="narrator-5"><div class="narrator-icon">🎙</div><div><span id="narrator-text-5"></span><span class="speaking-dots" id="speaking-dots-5" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Adaptive Delivery <span class="pill purple">Deep Dive</span></div>
+    <div class="screen-sub">Producing renditions only helps if the <em style="color:var(--blue);font-style:normal;font-weight:600">right one</em> reaches the <em style="color:var(--green);font-style:normal;font-weight:600">right viewer</em>.</div>
+
+    <div id="sc5-table" style="display:none">
+      <table class="partition-table" id="ptable5">
+        <thead>
+          <tr>
+            <th>Viewer</th>
+            <th>Network</th>
+            <th>Rendition served</th>
+            <th>Why</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr id="ptr-phone">
+            <td>Phone</td>
+            <td>1 bar · 4G</td>
+            <td>480p</td>
+            <td>Smallest file that still plays smoothly</td>
+          </tr>
+          <tr id="ptr-laptop">
+            <td>Laptop</td>
+            <td>Wifi</td>
+            <td>1080p</td>
+            <td>Plenty of bandwidth for full HD</td>
+          </tr>
+          <tr id="ptr-tv">
+            <td>Smart TV</td>
+            <td>Fiber</td>
+            <td>4K</td>
+            <td>Large screen, large bandwidth — use the best</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="verdict success" id="sc5-verdict" style="display:none">
+      <div class="verdict-icon">🔑</div>
+      <div>
+        <div class="verdict-title">The player picks the rendition — not the viewer</div>
+        <div class="verdict-body">Adaptive bitrate delivery measures the connection in real time and requests whichever rendition fits it. Nobody has to know their signal is weak for this to work — it just plays.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 6 — Summary / Concepts
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-6">
+    <div class="narrator" id="narrator-6"><div class="narrator-icon">🎙</div><div><span id="narrator-text-6"></span><span class="speaking-dots" id="speaking-dots-6" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Key Takeaways</div>
+    <div class="screen-sub">What every engineer should know about media processing and storage.</div>
+
+    <div class="concepts-grid">
+      <div class="concept-card">
+        <div class="concept-icon">🗄</div>
+        <div class="concept-title">Blob Storage First</div>
+        <div class="concept-body">Videos don't belong on app-server disks. Object storage like S3 is built for exactly this: cheap, durable, effectively unlimited.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">⚙️</div>
+        <div class="concept-title">Async Processing</div>
+        <div class="concept-body">Transcoding is slow and CPU-heavy. It runs off the request path — event-driven, queued, and worked — so uploads stay instant.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">🎞</div>
+        <div class="concept-title">Multiple Renditions</div>
+        <div class="concept-body">One encode job, many output files. 240p up to 4K, produced once, ready for whichever viewer needs them.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">🌍</div>
+        <div class="concept-title">Edge Delivery</div>
+        <div class="concept-body">A CDN caches renditions close to viewers, so the origin is only hit once no matter how many people watch.</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="verdict success">
+      <div class="verdict-icon">💡</div>
+      <div>
+        <div class="verdict-title">The rule of thumb</div>
+        <div class="verdict-body">Store the original once, encode it into many renditions asynchronously, and deliver the right one from the edge. Skip any one of those steps and someone, somewhere, is stuck watching a spinner.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Footer nav ── -->
+  <div class="footer">
+    <div class="footer-left">
+      <button class="btn ghost" id="btn-prev" onclick="prevScreen()" disabled>← Back</button>
+      <button class="btn blue"  id="btn-next" onclick="nextScreen()">Next →</button>
+    </div>
+    <div class="footer-right">
+      <button class="btn amber" id="btn-auto" onclick="runAuto()">▶ Auto demo</button>
+      <button class="btn ghost" id="btn-pause" onclick="togglePause()" style="display:none">⏸ Pause</button>
+      <button class="btn ghost" id="btn-restart" onclick="restart()">↺ Restart</button>
     </div>
   </div>
 
 </div>
 
 <script>
-function makeScene(prefix, stages, onFinish) {
-  const root = document.getElementById(prefix + '-scene');
-  const packet = document.getElementById(prefix + '-packet');
-  const capText = document.getElementById(prefix + '-capText');
-  const capIndex = document.getElementById(prefix + '-capIndex');
-  const progressFill = document.getElementById(prefix + '-progressFill');
-  const playBtn = document.getElementById(prefix + '-playBtn');
-  const voiceSelect = document.getElementById(prefix + '-voiceSelect');
-  const capOnlyChk = document.getElementById(prefix + '-capOnlyChk');
+// ═══════════════════════════
+// AUDIO ENGINE
+// ═══════════════════════════
+let audioEnabled = true;
+let audioCtx = null;
 
-  let idx = 0, playing = false, capOnly = false, voices = [], chosenVoice = null, advanceTimer = null;
-
-  function pickDefaultVoice() {
-    let i = voices.findIndex(v => v.name === 'Google UK English Female');
-    if (i === -1) i = voices.findIndex(v => /UK/i.test(v.name) && /female/i.test(v.name));
-    if (i === -1) i = voices.findIndex(v => /UK/i.test(v.name) || /en-GB/i.test(v.lang));
-    return i === -1 ? 0 : i;
-  }
-
-  function populateVoices() {
-    const all = speechSynthesis.getVoices();
-    voices = all.filter(v => v.lang.startsWith('en'));
-    if (voices.length === 0) voices = all;
-    voiceSelect.innerHTML = '';
-    voices.forEach((v, i) => {
-      const opt = document.createElement('option');
-      opt.value = i;
-      opt.textContent = v.name;
-      voiceSelect.appendChild(opt);
-    });
-    if (voices.length) {
-      const defaultIdx = pickDefaultVoice();
-      chosenVoice = voices[defaultIdx];
-      voiceSelect.value = defaultIdx;
-    }
-  }
-  if ('speechSynthesis' in window) {
-    populateVoices();
-    speechSynthesis.addEventListener('voiceschanged', populateVoices);
-  }
-  voiceSelect.onchange = () => { chosenVoice = voices[voiceSelect.value]; };
-  capOnlyChk.onchange = e => { capOnly = e.target.checked; };
-
-  function setActive(i) {
-    root.querySelectorAll('.node').forEach(n => n.classList.remove('active'));
-    const el = document.getElementById(prefix + '-node-' + i);
-    if (el) el.classList.add('active');
-  }
-
-  function litConnectorsUpTo(i) {
-    root.querySelectorAll('.connector').forEach(c => c.classList.remove('lit'));
-    for (let k = 0; k < i; k++) {
-      const c = document.getElementById(prefix + '-conn-' + k);
-      if (c) c.classList.add('lit');
-    }
-  }
-
-  function movePacket(i) {
-    const s = stages[i];
-    packet.style.transform = 'translate(' + s.cx + 'px,' + s.cy + 'px)';
-  }
-
-  function goTo(i) {
-    idx = i;
-    const s = stages[i];
-    capText.textContent = s.script;
-    capIndex.textContent = 'stage ' + (i + 1) + ' / ' + stages.length;
-    progressFill.style.width = (i / (stages.length - 1) * 100) + '%';
-    setActive(i);
-    litConnectorsUpTo(i);
-    movePacket(i);
-  }
-
-  function speakCurrent() {
-    const s = stages[idx];
-    clearTimeout(advanceTimer);
-    if (capOnly || !('speechSynthesis' in window)) {
-      advanceTimer = setTimeout(() => { if (playing) advance(); }, 3400);
-      return;
-    }
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(s.script);
-    if (chosenVoice) u.voice = chosenVoice;
-    u.rate = 1;
-    u.onend = () => { if (playing) advance(); };
-    speechSynthesis.speak(u);
-  }
-
-  function advance() {
-    if (idx >= stages.length - 1) { finish(); return; }
-    goTo(idx + 1);
-    speakCurrent();
-  }
-
-  function play() {
-    playing = true;
-    playBtn.textContent = 'Pause';
-    if (idx >= stages.length - 1) idx = 0;
-    goTo(idx);
-    speakCurrent();
-  }
-
-  function stop() {
-    playing = false;
-    playBtn.textContent = 'Play';
-    if ('speechSynthesis' in window) speechSynthesis.cancel();
-    clearTimeout(advanceTimer);
-  }
-
-  function finish() {
-    stop();
-    if (onFinish) setTimeout(onFinish, 900);
-  }
-
-  function restart() {
-    stop();
-    goTo(0);
-    capText.textContent = 'Click Play to start the narrated walkthrough.';
-  }
-
-  playBtn.onclick = () => { playing ? stop() : play(); };
-  document.getElementById(prefix + '-restartBtn').onclick = restart;
-
-  goTo(0);
-  return { stop: stop, play: play };
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
 }
 
-const scene0Stages = [
-  {cx:150, cy:122, script:"Say the system only ever stores a single master copy of the video — the original, full-resolution 4K file. No smaller versions exist anywhere."},
-  {cx:450, cy:122, script:"Now picture someone opening the app on a train, their phone showing just one bar of 4G signal."},
-  {cx:750, cy:122, script:"Their phone still has to pull that same giant 4K master file over that weak connection — so it just spins, and spins, and never finishes loading. Let's check how a media processing pipeline fixes this, in the next slide."}
-];
-
-const scene1Stages = [
-  {cx:130, cy:122, script:'The client streams the file straight into blob storage using a signed upload URL. This step runs on the client, no AWS service yet.'},
-  {cx:377, cy:122, script:'The original file lands in Amazon S3, inside a private raw bucket.'},
-  {cx:624, cy:122, script:'Amazon S3 event notifications detect the new object and fire an event, no polling required.'},
-  {cx:871, cy:122, script:'The job waits in an Amazon SQS queue until a worker is free to pick it up.'},
-  {cx:871, cy:322, script:'An AWS Lambda function picks up the job and kicks off the encoder.'},
-  {cx:624, cy:322, script:'AWS Elemental MediaConvert produces several resolutions, plus a thumbnail.'},
-  {cx:377, cy:322, script:'Finished renditions are written back to Amazon S3, in a separate processed bucket.'},
-  {cx:130, cy:322, script:"Amazon CloudFront caches the video at edge locations close to the viewer. Now let's see a real-world example of this in action."}
-];
-
-const scene2Stages = [
-  {cx:130, cy:122, script:'You upload a short video straight from your phone. This step happens on the client, no AWS service involved.'},
-  {cx:377, cy:122, script:'Facebook stores the original file in raw storage — the same role Amazon S3 plays on AWS.'},
-  {cx:624, cy:122, script:'A transcoding step encodes it into several formats, the same role AWS Elemental MediaConvert plays.'},
-  {cx:871, cy:122, script:'Multiple renditions come out, from 240p up to 1080p or higher, ready to be stored.'},
-  {cx:871, cy:322, script:'Renditions are pushed to edge servers close to viewers, the same role Amazon CloudFront plays on AWS.'},
-  {cx:160, cy:502, script:'On a phone with a weak 4G signal, the app quietly plays the 480p version.'},
-  {cx:500, cy:502, script:'On a laptop over wifi, the same video streams smoothly at 1080p.'},
-  {cx:840, cy:502, script:"On a smart TV with a fiber connection, it plays back in full 4K. That's the pipeline, end to end — matched to whatever connection someone's on."}
-];
-
-const tabBtn0 = document.getElementById('tabBtn0');
-const tabBtn1 = document.getElementById('tabBtn1');
-const tabBtn2 = document.getElementById('tabBtn2');
-const s0Scene = document.getElementById('s0-scene');
-const s1Scene = document.getElementById('s1-scene');
-const s2Scene = document.getElementById('s2-scene');
-
-function showScene(n) {
-  scene0.stop();
-  scene1.stop();
-  scene2.stop();
-  s0Scene.classList.toggle('active', n === 0);
-  s1Scene.classList.toggle('active', n === 1);
-  s2Scene.classList.toggle('active', n === 2);
-  tabBtn0.classList.toggle('tab-active', n === 0);
-  tabBtn1.classList.toggle('tab-active', n === 1);
-  tabBtn2.classList.toggle('tab-active', n === 2);
+function toggleAudio() {
+  audioEnabled = !audioEnabled;
+  const ctrl  = document.getElementById('audio-ctrl');
+  const label = document.getElementById('audio-label');
+  ctrl.className  = 'audio-ctrl' + (audioEnabled ? ' on' : '');
+  label.textContent = audioEnabled ? 'Audio on' : 'Audio off';
+  if (!audioEnabled) { window.speechSynthesis.cancel(); }
+  else {
+    try { getCtx().resume(); } catch(e) {}
+    speak("Audio enabled.", 0, null);
+  }
 }
-tabBtn0.onclick = () => showScene(0);
-tabBtn1.onclick = () => showScene(1);
-tabBtn2.onclick = () => showScene(2);
 
-const scene0 = makeScene('s0', scene0Stages, () => { showScene(1); scene1.play(); });
-const scene1 = makeScene('s1', scene1Stages, () => { showScene(2); scene2.play(); });
-const scene2 = makeScene('s2', scene2Stages);
+// ── Audio engine with true pause/resume via charIndex tracking ──
+let _cancelToken  = 0;
+let _charOffset   = 0;
+let _pausedText   = '';
+let _pausedIdx    = 0;
+let _pausedOnEnd  = null;
+let _pausedResolve = null;
+
+function _getVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  return voices.find(v => v.lang.startsWith('en') && (
+    v.name.includes('Google UK English Female') || v.name.includes('Google') ||
+    v.name.includes('Samantha') || v.name.includes('Daniel') || v.name.includes('Alex')
+  )) || voices.find(v => v.lang.startsWith('en'));
+}
+
+function _showNarrator(screenIdx, text) {
+  const ntxt    = document.getElementById('narrator-text'  + (screenIdx > 0 ? '-'+screenIdx : ''));
+  const ndots   = document.getElementById('speaking-dots'  + (screenIdx > 0 ? '-'+screenIdx : ''));
+  const nbubble = document.getElementById('narrator'       + (screenIdx > 0 ? '-'+screenIdx : ''));
+  if (ntxt)    ntxt.textContent = text;
+  if (ndots)   ndots.style.display = 'inline';
+  if (nbubble) nbubble.classList.add('visible');
+}
+
+function _hideNarrator(screenIdx) {
+  const ndots   = document.getElementById('speaking-dots' + (screenIdx > 0 ? '-'+screenIdx : ''));
+  const nbubble = document.getElementById('narrator'      + (screenIdx > 0 ? '-'+screenIdx : ''));
+  if (ndots)   ndots.style.display = 'none';
+  if (nbubble) nbubble.classList.remove('visible');
+}
+
+function _doSpeak(text, startChar, screenIdx, onEnd, token) {
+  window.speechSynthesis.cancel();
+
+  const remaining = text.slice(startChar);
+  if (!remaining.trim()) { if (onEnd) onEnd(); return; }
+
+  _showNarrator(screenIdx, text);
+
+  const utter = new SpeechSynthesisUtterance(remaining);
+  utter.rate  = 0.95;
+  utter.pitch = 1.0;
+  const v = _getVoice();
+  if (v) utter.voice = v;
+
+  utter.onboundary = (e) => {
+    if (_cancelToken !== token) return;
+    if (e.name === 'word') _charOffset = startChar + (e.charIndex || 0);
+  };
+
+  utter.onend = () => {
+    if (_cancelToken !== token) return;
+    _hideNarrator(screenIdx);
+    _pausedText  = '';
+    _charOffset  = 0;
+    _pausedOnEnd = null;
+    if (onEnd) onEnd();
+  };
+
+  utter.onerror = (e) => {
+    if (_cancelToken !== token) return;
+    if (e.error === 'interrupted' || e.error === 'canceled') return;
+    _hideNarrator(screenIdx);
+    if (onEnd) onEnd();
+  };
+
+  window.speechSynthesis.speak(utter);
+}
+
+function speak(text, screenIdx, onEnd) {
+  if (!audioEnabled) { if (onEnd) onEnd(); return; }
+
+  _cancelToken++;
+  const myToken = _cancelToken;
+
+  _charOffset  = 0;
+  _pausedText  = text;
+  _pausedIdx   = screenIdx;
+  _pausedOnEnd = onEnd;
+
+  _doSpeak(text, 0, screenIdx, onEnd, myToken);
+}
+
+function speakWait(text, screenIdx) {
+  return new Promise(resolve => speak(text, screenIdx, resolve));
+}
+
+// Tones
+function tone(freq, type, dur, vol=0.12) {
+  if (!audioEnabled) return;
+  try {
+    const ctx = getCtx(), osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.connect(g); g.connect(ctx.destination);
+    osc.type = type; osc.frequency.value = freq;
+    g.gain.setValueAtTime(vol, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.start(); osc.stop(ctx.currentTime + dur);
+  } catch(e) {}
+}
+const sfx = {
+  click:   () => tone(700, 'sine', 0.07, 0.08),
+  data:    () => tone(1100, 'square', 0.04, 0.05),
+  success: () => [523,659,784,1047].forEach((f,i) => setTimeout(() => tone(f,'sine',.18,.11), i*80)),
+  warn:    () => [440,370,311].forEach((f,i) => setTimeout(() => tone(f,'sawtooth',.15,.10), i*100)),
+  error:   () => [190,160].forEach((f,i) => setTimeout(() => tone(f,'sawtooth',.25,.14), i*120)),
+  pop:     () => tone(900, 'sine', 0.06, 0.09),
+  chord:   () => [261,329,392,523].forEach((f,i) => setTimeout(() => tone(f,'sine',.28,.09), i*55)),
+};
+
+// ═══════════════════════════
+// SCREEN ENGINE
+// ═══════════════════════════
+let currentScreen = 0;
+const TOTAL = 7;
+let busy = false;
+
+function delay(ms) {
+  return new Promise(resolve => {
+    const start = Date.now();
+    function tick() {
+      if (paused) { setTimeout(tick, 100); return; }
+      const elapsed = Date.now() - start;
+      if (elapsed >= ms) resolve();
+      else setTimeout(tick, Math.min(100, ms - elapsed));
+    }
+    tick();
+  });
+}
+
+function updateHeader(idx) {
+  const h1  = document.getElementById('header-title');
+  const sub = document.getElementById('header-sub');
+  const mod = document.getElementById('module-num');
+  if (!h1 || !sub || !mod) return;
+
+  const isIntro = idx === 0;
+  const title    = isIntro
+    ? 'Architecture Thinking <span style="color:var(--blue)">for AI-Assisted Development</span>'
+    : 'Media Processing &amp; Storage';
+  const subtitle = isIntro
+    ? 'Learn how real systems evolve — and how to work smarter with AI.'
+    : 'From a single upload to multiple renditions, delivered from the edge — and what breaks without a pipeline.';
+  const modLabel = 'Chapter 08';
+
+  if (h1.dataset.screen === String(idx)) return;
+  h1.dataset.screen = String(idx);
+
+  h1.classList.add('fading');
+  sub.classList.add('fading');
+  mod.classList.add('fading');
+
+  setTimeout(() => {
+    h1.innerHTML     = title;
+    sub.textContent  = subtitle;
+    mod.textContent  = modLabel;
+    h1.classList.remove('fading');
+    sub.classList.remove('fading');
+    mod.classList.remove('fading');
+  }, 550);
+}
+
+function showScreen(idx) {
+  document.querySelectorAll('.screen').forEach((s, i) => {
+    s.classList.toggle('active', i === idx);
+  });
+  for(let i=0;i<TOTAL;i++){
+    const p = document.getElementById('prog-'+i);
+    p.className = 'prog-step' + (i < idx ? ' done' : i===idx ? ' active' : '');
+  }
+  // screen-3 ("Weak Signal") is the breaking-point screen — mark it warn once passed
+  if (idx > 3) {
+    const p3 = document.getElementById('prog-3');
+    if (p3) p3.className = 'prog-step warn done';
+  }
+  currentScreen = idx;
+  updateHeader(idx);
+  document.getElementById('btn-prev').disabled = idx === 0;
+  document.getElementById('btn-next').disabled = idx === TOTAL - 1;
+  document.getElementById('btn-next').style.display = idx === TOTAL-1 ? 'none' : 'flex';
+}
+
+// ── Animate screen 0: intro ──
+async function animateScreen0() {
+  document.querySelectorAll('.intro-card').forEach(c => c.classList.remove('animating'));
+  const inspEl = document.querySelector('.intro-inspiration');
+  if (inspEl) inspEl.classList.remove('animating');
+
+  await speakWait("Welcome to Engineering Refresh. This chapter explores Media Processing and Storage — how a single video upload becomes something every device, on every network, can actually watch.", 0);
+  await delay(600);
+
+  const cards = document.querySelectorAll('.intro-card');
+  for (let i = 0; i < cards.length; i++) {
+    sfx.data();
+    cards[i].classList.add('animating');
+    await delay(1400);
+  }
+
+  await delay(400);
+  if (inspEl) inspEl.classList.add('animating');
+  sfx.pop();
+  await delay(800);
+
+  await speakWait("A phone upload looks instant. Underneath, there's an entire pipeline of storage, encoding, and delivery working to make that true for everyone watching.", 0);
+  await delay(400);
+}
+
+// ── Bridge narration: intro → upload screen ──
+async function animateScreen1Intro() {
+  await speakWait("Let's start with Media Processing and Storage.", 1);
+  await delay(800);
+  await speakWait("The central concept here is the transcoding pipeline — a system that takes one uploaded file and turns it into whatever each viewer's device and network actually need.", 1);
+  await delay(800);
+  await speakWait("We'll start with the simplest possible approach — just save the file exactly as it was uploaded — and see where that runs into trouble.", 1);
+  await delay(1000);
+}
+
+// ── Animate screen 1: the naive upload path lights up ──
+async function animateScreen1() {
+  await speakWait("Someone uploads a video. Today, the app does the simplest thing possible: it saves the original file, untouched, and serves that same file back to anyone who watches it.", 1);
+  sfx.data();
+  document.getElementById('sc1-client').setAttribute('fill', '#e8f2fd');
+  document.getElementById('sc1-client').setAttribute('stroke', '#1a7fe8');
+  await delay(1000);
+  sfx.data();
+  document.getElementById('sc1-server').setAttribute('fill', '#e8f2fd');
+  document.getElementById('sc1-server').setAttribute('stroke', '#1a7fe8');
+  await delay(1000);
+  sfx.data();
+  document.getElementById('sc1-disk').setAttribute('fill', '#f3f0ff');
+  document.getElementById('sc1-disk').setAttribute('stroke', '#7c3aed');
+  await delay(900);
+}
+
+async function animateScreen1Full() {
+  await animateScreen1Intro();
+  await animateScreen1();
+}
+
+// ── Animate screen 2: happy path on wifi ──
+async function animateScreen2() {
+  await speakWait("A friend opens the video at home, on a solid wifi connection. The server just hands over the same 4K file it received — and on a fast connection, that works perfectly.", 2);
+  await delay(900);
+
+  const load = document.getElementById('sc2-load');
+  const qual = document.getElementById('sc2-quality');
+
+  sfx.data();
+  load.className = 'stat-card good';
+  document.getElementById('sc2-load-val').textContent = '180 ms';
+  document.getElementById('sc2-load-note').textContent = '✓ Feels instant';
+  await delay(1200);
+
+  sfx.data();
+  qual.className = 'stat-card good';
+  document.getElementById('sc2-quality-val').textContent = 'Full 4K';
+  document.getElementById('sc2-quality-note').textContent = '✓ Nothing to trade off';
+  await delay(1000);
+
+  sfx.success();
+}
+
+// ── Animate screen 3: weak-signal breaking point ──
+async function animateScreen3() {
+  await speakWait("Now someone else opens the same video — on a train, with one bar of 4G. Same server. Same file. Nothing about the video has changed.", 3);
+  sfx.warn();
+  await delay(1000);
+
+  const cards = [
+    { id:'sc3-data',       val:'1.2 GB',         note:'✗ The entire master file, every time' },
+    { id:'sc3-renditions', val:'1 (original only)', note:'✗ No smaller version exists' },
+    { id:'sc3-load',       val:'never finishes',  note:'✗ Timed out, stuck loading' },
+    { id:'sc3-playback',   val:'stuck buffering', note:'✗ Spins, and spins, and spins' },
+  ];
+
+  for (const c of cards) {
+    sfx.error();
+    const el = document.getElementById(c.id);
+    el.className = 'stat-card bad';
+    document.getElementById(c.id+'-val').textContent  = c.val;
+    document.getElementById(c.id+'-note').textContent = c.note;
+    await delay(950);
+  }
+
+  await speakWait("There's no smaller version to fall back to. The phone is stuck trying to pull down the exact same giant file as the fiber connection sitting right next to it.", 3);
+}
+
+// ── Animate screen 4: the async pipeline solution ──
+async function animateScreen4() {
+  await speakWait("The fix is an asynchronous transcoding pipeline. The upload itself doesn't change — the client still streams the file straight into blob storage using a signed URL, landing in a private raw bucket. That step triggers an S3 event the moment the file lands, no polling required.", 4);
+
+  await delay(900);
+  document.getElementById('sc4-pipeline2').style.display = 'block';
+  document.getElementById('sc4-pipeline2').style.animation = 'fadeIn .65s ease';
+  await speakWait("From there, it's automatic. The event queues a job in Amazon SQS. A Lambda worker picks it up and kicks off AWS Elemental MediaConvert, which produces several resolutions plus a thumbnail — written back to a processed bucket, and cached at the edge by CloudFront.", 4);
+  sfx.chord();
+  await delay(1100);
+
+  document.getElementById('sc4-stats').style.display = 'grid';
+
+  const s4cards = [
+    { id:'sc4-renditions', val:'5 · 240p → 4K', note:'✓ Produced once, ready for any device' },
+    { id:'sc4-load',       val:'1.4 s',         note:'✓ Down from never finishing' },
+    { id:'sc4-origin',     val:'once, then cached', note:'✓ CDN serves every request after' },
+    { id:'sc4-master',     val:'never',         note:'✓ Weak connections never touch the 4K master' },
+  ];
+
+  for (const c of s4cards) {
+    sfx.data();
+    const el = document.getElementById(c.id);
+    el.className = 'stat-card good';
+    document.getElementById(c.id + '-val').textContent  = c.val;
+    document.getElementById(c.id + '-note').textContent = c.note;
+    await delay(1000);
+  }
+
+  await delay(400);
+  sfx.success();
+  await speakWait("One upload, five renditions, produced once — ready for whichever device asks.", 4);
+}
+
+// ── Animate screen 5: deep dive on adaptive delivery ──
+async function animateScreen5() {
+  await speakWait("Producing multiple renditions only helps if the right one actually reaches the right viewer. That's what adaptive delivery handles — matching quality to the connection, automatically.", 5);
+  await delay(900);
+
+  await speakWait("A phone on one bar of 4G gets served a small rendition — maybe 480p. A laptop on wifi gets 1080p. A smart TV on fiber gets the full 4K master. Same pipeline, same video, three completely different experiences.", 5);
+  await delay(800);
+
+  document.getElementById('sc5-table').style.display = 'block';
+  document.getElementById('sc5-table').style.animation = 'fadeIn .9s cubic-bezier(0.22,0.61,0.36,1)';
+
+  const rows = ['ptr-phone','ptr-laptop','ptr-tv'];
+  for (const id of rows) {
+    sfx.data();
+    document.getElementById(id).className = 'highlight-row';
+    await delay(900);
+    document.getElementById(id).className = '';
+  }
+  await delay(400);
+
+  document.getElementById('sc5-verdict').style.display = 'flex';
+  document.getElementById('sc5-verdict').style.animation = 'fadeIn .9s cubic-bezier(0.22,0.61,0.36,1)';
+  sfx.chord();
+  await delay(600);
+
+  await speakWait("The key insight: the CDN and the player pick the rendition — not the viewer, and not a human. Nobody has to know their signal is weak for this to work.", 5);
+}
+
+// ── Animate screen 6: summary ──
+async function animateScreen6() {
+  await speakWait("The key lesson: store the original once, encode it into many renditions asynchronously, and deliver the right one from the edge. Skip any one of those steps, and someone, somewhere, ends up watching a spinner instead of a video.", 6);
+  sfx.success();
+}
+
+const screenAnimations = [
+  animateScreen0,
+  animateScreen1Full,
+  animateScreen2,
+  animateScreen3,
+  animateScreen4,
+  animateScreen5,
+  animateScreen6,
+];
+
+// ── Pause / Resume ──
+let paused = false;
+let pauseResolve = null;
+
+function showPauseBtn(show) {
+  const btn = document.getElementById('btn-pause');
+  if (!btn) return;
+  btn.style.display = show ? 'flex' : 'none';
+  if (!show) {
+    paused = false;
+    btn.textContent = '⏸ Pause';
+    btn.classList.remove('blue');
+    btn.classList.add('ghost');
+  }
+}
+
+function togglePause() {
+  const btn = document.getElementById('btn-pause');
+  paused = !paused;
+
+  if (paused) {
+    window.speechSynthesis.cancel();
+    btn.textContent = '▶ Resume';
+    btn.classList.add('blue');
+    btn.classList.remove('ghost');
+
+  } else {
+    btn.textContent = '⏸ Pause';
+    btn.classList.remove('blue');
+    btn.classList.add('ghost');
+
+    if (_pausedText) {
+      const resumeFrom = _charOffset;
+      const resumeText = _pausedText;
+      const resumeIdx  = _pausedIdx;
+      const resumeEnd  = _pausedOnEnd;
+      const myToken    = _cancelToken;
+
+      _doSpeak(resumeText, resumeFrom, resumeIdx, resumeEnd, myToken);
+    }
+
+    if (pauseResolve) { pauseResolve(); pauseResolve = null; }
+  }
+}
+
+function pausePoint() {
+  if (!paused) return Promise.resolve();
+  return new Promise(resolve => { pauseResolve = resolve; });
+}
+
+// ── Begin Module: cinematic transition from intro → upload screen ──
+async function beginModule() {
+  if (busy) return;
+  busy = true;
+  paused = false;
+  sfx.click();
+  showPauseBtn(true);
+
+  const introScreen = document.getElementById('screen-0');
+  const nextScreenEl = document.getElementById('screen-1');
+  const overlay = document.getElementById('cinematic-overlay');
+
+  introScreen.classList.add('sliding-out');
+  await delay(680);
+
+  introScreen.classList.remove('sliding-out');
+  introScreen.classList.remove('active');
+  overlay.classList.add('fade-in');
+  await delay(700);
+
+  nextScreenEl.classList.add('active');
+  currentScreen = 1;
+  updateHeader(1);
+  document.getElementById('btn-prev').disabled = false;
+  document.getElementById('prog-0').className = 'prog-step done';
+  document.getElementById('prog-1').className = 'prog-step active';
+
+  overlay.classList.remove('fade-in');
+  overlay.classList.add('fade-out');
+  nextScreenEl.classList.add('slide-in');
+  await delay(800);
+  nextScreenEl.classList.remove('slide-in');
+  overlay.classList.remove('fade-out');
+
+  window.speechSynthesis.cancel();
+  await animateScreen1Intro();
+
+  await animateScreen1();
+  showPauseBtn(false);
+  busy = false;
+}
+
+async function goToScreen(idx, animate=true) {
+  if(busy) return;
+  busy = true;
+  _cancelToken++;
+  window.speechSynthesis.cancel();
+  _pausedText = '';
+  paused = false;
+  showScreen(idx);
+  showPauseBtn(true);
+  if(animate) await screenAnimations[idx]();
+  showPauseBtn(false);
+  busy = false;
+}
+
+async function nextScreen() {
+  if(currentScreen < TOTAL-1) {
+    _cancelToken++;
+    window.speechSynthesis.cancel();
+    _pausedText = '';
+    busy  = false;
+    paused = false;
+    showPauseBtn(false);
+    sfx.click();
+    await goToScreen(currentScreen + 1);
+  }
+}
+
+async function prevScreen() {
+  if(currentScreen > 0) {
+    _cancelToken++;
+    window.speechSynthesis.cancel();
+    _pausedText = '';
+    busy  = false;
+    paused = false;
+    showPauseBtn(false);
+    sfx.click();
+    resetStats();
+    await goToScreen(currentScreen - 1, true);
+  }
+}
+
+function restart() {
+  _cancelToken++;
+  window.speechSynthesis.cancel();
+  _pausedText = '';
+  busy  = false;
+  paused = false;
+  showPauseBtn(false);
+
+  sfx.click();
+  resetStats();
+
+  document.querySelectorAll('.intro-card').forEach(c => c.classList.remove('animating'));
+  const insp = document.querySelector('.intro-inspiration');
+  if (insp) insp.classList.remove('animating');
+
+  // Reset screen-1 SVG node highlights
+  document.getElementById('sc1-client').setAttribute('fill', '#f5f7fa');
+  document.getElementById('sc1-client').setAttribute('stroke', '#dde1ea');
+  document.getElementById('sc1-server').setAttribute('fill', '#f5f7fa');
+  document.getElementById('sc1-server').setAttribute('stroke', '#dde1ea');
+  document.getElementById('sc1-disk').setAttribute('fill', '#f5f7fa');
+  document.getElementById('sc1-disk').setAttribute('stroke', '#dde1ea');
+
+  showScreen(0);
+  updateHeader(0);
+  document.getElementById('btn-prev').disabled = true;
+  document.getElementById('btn-next').style.display = 'flex';
+}
+
+function resetStats() {
+  // screen 2
+  ['sc2-load','sc2-quality'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.className = 'stat-card';
+    const vEl = document.getElementById(id+'-val');
+    const nEl = document.getElementById(id+'-note');
+    if(vEl) vEl.textContent = '—';
+    if(nEl) nEl.textContent = '';
+  });
+  // screen 3
+  ['sc3-data','sc3-renditions','sc3-load','sc3-playback'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.className = 'stat-card';
+    const vEl = document.getElementById(id+'-val');
+    const nEl = document.getElementById(id+'-note');
+    if(vEl) vEl.textContent = '—';
+    if(nEl) nEl.textContent = '';
+  });
+  // screen 4
+  document.getElementById('sc4-stats').style.display = 'none';
+  document.getElementById('sc4-pipeline2').style.display = 'none';
+  ['sc4-renditions','sc4-load','sc4-origin','sc4-master'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.className = 'stat-card';
+    const vEl = document.getElementById(id+'-val');
+    const nEl = document.getElementById(id+'-note');
+    if(vEl) vEl.textContent = '—';
+    if(nEl) nEl.textContent = '';
+  });
+  // screen 5 (deep dive)
+  const table5 = document.getElementById('sc5-table');
+  if (table5) table5.style.display = 'none';
+  const verdict5 = document.getElementById('sc5-verdict');
+  if (verdict5) verdict5.style.display = 'none';
+  ['ptr-phone','ptr-laptop','ptr-tv'].forEach(id => {
+    const r = document.getElementById(id);
+    if (r) r.className = '';
+  });
+}
+
+async function runAuto() {
+  if(busy) return;
+  sfx.click();
+  resetStats();
+  document.getElementById('sc1-client').setAttribute('fill', '#f5f7fa');
+  document.getElementById('sc1-client').setAttribute('stroke', '#dde1ea');
+  document.getElementById('sc1-server').setAttribute('fill', '#f5f7fa');
+  document.getElementById('sc1-server').setAttribute('stroke', '#dde1ea');
+  document.getElementById('sc1-disk').setAttribute('fill', '#f5f7fa');
+  document.getElementById('sc1-disk').setAttribute('stroke', '#dde1ea');
+
+  await goToScreen(0);
+  await delay(1800);
+  await beginModule();
+  await delay(1800);
+  for(let i = 2; i < TOTAL; i++){
+    await goToScreen(i);
+    await delay(1800);
+  }
+}
+
+// Init voices
+if (window.speechSynthesis) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+}
+
+// Init
+showScreen(0);
 </script>
 </body>
 </html>
