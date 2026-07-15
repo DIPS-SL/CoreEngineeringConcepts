@@ -1,0 +1,1626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 9 — Traffic Routing &amp; Load Balancing | Engineering Refresh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #f0f2f5;
+    --surface:   #ffffff;
+    --surface2:  #f5f7fa;
+    --border:    #dde1ea;
+    --border2:   #c4cad8;
+    --text:      #1a1f2e;
+    --muted:     #5a6478;
+    --faint:     #9aa3b5;
+    --blue:      #1a7fe8;
+    --blue-bg:   #e8f2fd;
+    --green:     #18a864;
+    --green-bg:  #e6f7f0;
+    --red:       #e03e3e;
+    --red-bg:    #fdeaea;
+    --amber:     #d97b10;
+    --amber-bg:  #fef3e2;
+    --purple:    #7c3aed;
+    --purple-bg: #f3f0ff;
+    --font-ui:   'DM Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: none;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 700px;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  .header {
+    padding: 18px 24px 16px;
+    border-bottom: none;
+    display: flex; align-items: flex-start;
+    justify-content: space-between; gap: 12px;
+  }
+  .header-left { flex: 1; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--blue); background: var(--blue-bg);
+    border: 1px solid rgba(26,127,232,.25); border-radius: 6px;
+    padding: 3px 9px; margin-bottom: 8px;
+  }
+  .header h1 { font-size: 19px; font-weight: 600; margin-bottom: 3px; }
+  .header p  { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+  .module-num {
+    font-family: var(--font-mono); font-size: 11px; color: var(--faint);
+    background: var(--surface2); border: none;
+    border-radius: 8px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  /* ── Audio toggle ── */
+  .audio-ctrl {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface2); border: none;
+    border-radius: 8px; padding: 5px 10px; cursor: pointer;
+    font-size: 11px; color: var(--muted); transition: all .35s ease;
+    user-select: none;
+  }
+  .audio-ctrl:hover { border-color: var(--border2); background: #edf0f5; }
+  .audio-ctrl.on { background: var(--blue-bg); border-color: rgba(26,127,232,.4); color: var(--blue); }
+  .audio-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); transition: background .2s; }
+  .audio-ctrl.on .audio-dot { background: var(--blue); animation: pulse 2.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.3);opacity:.6} }
+
+  /* ── Step progress bar ── */
+  .progress-bar {
+    display: flex; gap: 0;
+    border-bottom: none;
+  }
+  .prog-step {
+    flex: 1; padding: 8px 0; text-align: center;
+    font-family: var(--font-mono); font-size: 9px;
+    color: var(--faint); background: var(--surface2);
+    border-right: none;
+    transition: all .7s cubic-bezier(0.4,0,0.2,1); cursor: default;
+  }
+  .prog-step:last-child { border-right: none; }
+  .prog-step.active { background: var(--blue-bg); color: var(--blue); font-weight: 500; }
+  .prog-step.done   { background: var(--green-bg); color: var(--green); }
+  .prog-step.warn   { background: var(--red-bg);   color: var(--red); }
+
+  /* ── Screen container ── */
+  .screen {
+    display: none;
+    padding: 20px 24px;
+    animation: fadeIn .9s cubic-bezier(0.22,0.61,0.36,1);
+  }
+  .screen.active { display: block; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ── Narrator bubble ── */
+  .narrator {
+    padding: 10px 14px; margin-bottom: 16px;
+    background: var(--blue-bg); border: none;
+    border-radius: 10px; font-size: 12px; color: var(--blue); line-height: 1.6;
+    display: none; align-items: flex-start; gap: 8px;
+  }
+  .narrator.visible { display: flex; }
+  .narrator-icon { font-size: 15px; flex-shrink: 0; }
+  .speaking-dots span {
+    display: inline-block; width: 4px; height: 4px; border-radius: 50%;
+    background: var(--blue); margin: 0 1px; vertical-align: middle;
+    animation: bounce 1.8s ease-in-out infinite;
+  }
+  .speaking-dots span:nth-child(2) { animation-delay: .2s; }
+  .speaking-dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+
+  /* ── Screen titles ── */
+  .screen-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+  .screen-sub   { font-size: 12px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+
+  /* ── Code / config box ── */
+  .query-box {
+    background: #1a1f2e; border-radius: 10px; padding: 12px 16px; border: none;
+    font-family: var(--font-mono); font-size: 11px; line-height: 1.8;
+    color: #c9d1d9; overflow-x: auto; margin-bottom: 14px;
+    white-space: pre;
+  }
+  .sql-kw  { color: #ff7b72; }
+  .sql-fn  { color: #79c0ff; }
+  .sql-cmt { color: #6e7681; }
+  .sql-num { color: #f2cc60; }
+
+  /* ── Stat callouts ── */
+  .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat-card {
+    background: var(--surface2); border: none;
+    border-radius: 10px; padding: 12px 14px;
+    transition: border-color .7s cubic-bezier(0.4,0,0.2,1), background .7s cubic-bezier(0.4,0,0.2,1);
+  }
+  .stat-card.good { border-color: var(--green); background: var(--green-bg); }
+  .stat-card.bad  { border-color: var(--red);   background: var(--red-bg); }
+  .stat-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+  .stat-card.good .stat-label { color: var(--green); }
+  .stat-card.bad  .stat-label { color: var(--red); }
+  .stat-val   { font-size: 22px; font-weight: 600; font-family: var(--font-mono); color: var(--text); }
+  .stat-card.good .stat-val { color: var(--green); }
+  .stat-card.bad  .stat-val { color: var(--red); }
+  .stat-note  { font-size: 10px; color: var(--faint); margin-top: 4px; }
+  .stat-card.good .stat-note { color: var(--green); opacity: .8; }
+  .stat-card.bad  .stat-note { color: var(--red);   opacity: .8; }
+
+  /* ── Verdict banner ── */
+  .verdict {
+    border-radius: 10px; padding: 14px 16px;
+    display: flex; align-items: flex-start; gap: 12px;
+    font-size: 13px; line-height: 1.5;
+  }
+  .verdict.success { background: var(--green-bg); border: none; color: var(--green); }
+  .verdict.fail    { background: var(--red-bg);   border: 1px solid rgba(224,62,62,.3);  color: var(--red); }
+  .verdict-icon { font-size: 20px; flex-shrink: 0; }
+  .verdict-title { font-weight: 600; font-size: 14px; margin-bottom: 3px; }
+  .verdict-body  { font-size: 12px; opacity: .85; }
+
+  /* ── SVG diagrams ── */
+  .lb-svg { display: block; width: 100%; }
+
+  /* ── Footer nav ── */
+  .footer {
+    padding: 14px 24px;
+    border-top: none;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    flex-wrap: wrap;
+  }
+  .footer-left  { display: flex; gap: 8px; flex-wrap: wrap; }
+  .footer-right { display: flex; gap: 8px; }
+
+  .btn {
+    font-family: var(--font-ui); font-size: 12px; font-weight: 500;
+    padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    border: none; background: var(--surface2); color: var(--text);
+    transition: all .35s cubic-bezier(0.4,0,0.2,1); display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: #edf0f5; border-color: var(--border2); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+  .btn.green  { background: var(--green-bg);  border-color: rgba(24,168,100,.4);  color: var(--green); }
+  .btn.red    { background: var(--red-bg);    border-color: rgba(224,62,62,.4);   color: var(--red); }
+  .btn.blue   { background: var(--blue-bg);   border-color: rgba(26,127,232,.4);  color: var(--blue); }
+  .btn.purple { background: var(--purple-bg); border-color: rgba(124,58,237,.4);  color: var(--purple); }
+  .btn.amber  { background: var(--amber-bg);  border-color: rgba(217,123,16,.5);  color: var(--amber); }
+  .btn.ghost  { background: transparent; border-color: var(--border); color: var(--muted); }
+
+  /* ── Concepts (last screen) ── */
+  .concepts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .concept-card {
+    background: var(--surface2); border: none;
+    border-radius: 10px; padding: 12px;
+  }
+  .concept-icon { font-size: 18px; margin-bottom: 6px; }
+  .concept-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+  }
+  .concept-body { font-size: 11px; color: var(--faint); line-height: 1.5; }
+
+  /* ── Divider ── */
+  .divider { height: 1px; background: transparent; margin: 14px 0; }
+
+  /* ── Tag pill inline ── */
+  .pill {
+    display: inline-flex; align-items: center;
+    font-family: var(--font-mono); font-size: 9px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px; vertical-align: middle; margin-left: 4px;
+  }
+  .pill.green  { background: var(--green-bg);  color: var(--green); }
+  .pill.red    { background: var(--red-bg);    color: var(--red); }
+  .pill.blue   { background: var(--blue-bg);   color: var(--blue); }
+  .pill.purple { background: var(--purple-bg); color: var(--purple); }
+
+  /* ── Intro screen (screen-0) ── */
+  .intro-screen {
+    background: var(--surface);
+    padding: 20px 24px 18px;
+    position: relative;
+  }
+  .intro-cards {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    margin-bottom: 12px;
+  }
+  .intro-card {
+    background: var(--surface2);
+    border: none;
+    border-radius: 10px; padding: 10px 12px;
+    transition: border-color .2s;
+    position: relative; overflow: hidden;
+  }
+  .intro-card::after {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--card-glow, var(--blue)), transparent);
+    border-radius: 10px 10px 0 0;
+  }
+  .intro-card-icon { font-size: 18px; margin-bottom: 5px; display: block; }
+  .intro-card-title {
+    font-size: 11.5px; font-weight: 600; color: var(--text);
+    margin-bottom: 3px; line-height: 1.2;
+  }
+  .intro-card-text {
+    font-size: 10px; color: var(--muted);
+    line-height: 1.5;
+  }
+  .intro-inspiration {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--green-bg);
+    border: none;
+    border-left: 3px solid var(--green);
+    border-radius: 10px; padding: 11px 13px;
+    margin-bottom: 12px;
+  }
+  .intro-insp-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+  .intro-insp-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: .07em; text-transform: uppercase;
+    color: var(--green); margin-bottom: 4px;
+  }
+  .intro-insp-text {
+    font-size: 11px; color: var(--muted);
+    line-height: 1.55;
+  }
+
+  /* Card accent colours */
+  .intro-card:nth-child(1) { --card-glow: var(--blue); }
+  .intro-card:nth-child(2) { --card-glow: var(--purple); }
+  .intro-card:nth-child(3) { --card-glow: var(--green); }
+  .intro-card:nth-child(4) { --card-glow: var(--amber); }
+
+  /* Narrator — light variant on intro */
+  .narrator-dark {
+    padding: 9px 13px; margin-bottom: 12px;
+    background: var(--blue-bg); border: none;
+    border-radius: 10px; font-size: 12px; color: var(--blue); line-height: 1.5;
+    display: none; align-items: flex-start; gap: 8px;
+  }
+  .narrator-dark.visible { display: flex; }
+
+  /* ── Dynamic header transitions ── */
+  .header h1 { transition: opacity .65s cubic-bezier(0.4,0,0.2,1), transform .65s cubic-bezier(0.4,0,0.2,1); }
+  .header p  { transition: opacity .65s cubic-bezier(0.4,0,0.2,1), transform .65s cubic-bezier(0.4,0,0.2,1); }
+  .header h1.fading, .header p.fading { opacity: 0; transform: translateY(-4px); }
+  .module-num { transition: opacity .5s ease; }
+  .module-num.fading { opacity: 0; }
+
+  /* ── Intro card staggered entry ── */
+  @keyframes cardEntry {
+    from { opacity: 0; transform: translateY(28px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .intro-card.animating {
+    opacity: 0;
+    animation: cardEntry 1.6s cubic-bezier(0.22,0.61,0.36,1) forwards;
+  }
+  .intro-card.animating:nth-child(1) { animation-delay: .15s; }
+  .intro-card.animating:nth-child(2) { animation-delay: .45s; }
+  .intro-card.animating:nth-child(3) { animation-delay: .75s; }
+  .intro-card.animating:nth-child(4) { animation-delay: 1.05s; }
+
+  @keyframes inspEntry {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .intro-inspiration.animating {
+    opacity: 0;
+    animation: inspEntry 1s cubic-bezier(0.22,0.61,0.36,1) 1.35s forwards;
+  }
+
+  /* ── Screen slide transitions ── */
+  @keyframes slideOut {
+    from { opacity: 1; transform: translateX(0); }
+    to   { opacity: 0; transform: translateX(-28px); }
+  }
+  .screen.sliding-out {
+    display: block !important;
+    animation: slideOut .7s cubic-bezier(0.4,0,1,1) forwards;
+    pointer-events: none;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(28px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .screen.slide-in {
+    animation: slideIn .8s cubic-bezier(0.22,0.61,0.36,1) forwards !important;
+  }
+
+  /* ── Cinematic transition overlay ── */
+  #cinematic-overlay {
+    position: fixed; inset: 0; z-index: 9999;
+    background: var(--surface);
+    opacity: 0; pointer-events: none;
+    transition: opacity .7s cubic-bezier(0.4,0,0.2,1);
+  }
+  #cinematic-overlay.fade-in  { opacity: 1; pointer-events: all; }
+  #cinematic-overlay.fade-out { opacity: 0; pointer-events: none; }
+
+  /* ── Comparison table ── */
+  .compare-table {
+    width: 100%; border-collapse: collapse;
+    font-family: var(--font-mono); font-size: 10.5px;
+    margin-bottom: 12px;
+  }
+  .compare-table th {
+    padding: 7px 12px; text-align: left;
+    background: var(--surface2); color: var(--muted);
+    border: none; font-weight: 500;
+    text-transform: uppercase; letter-spacing: .06em; font-size: 9px;
+  }
+  .compare-table td {
+    padding: 8px 12px; border: none;
+    color: var(--text); vertical-align: top; line-height: 1.5;
+    transition: background .5s ease, color .5s ease;
+  }
+  .compare-table tr.hl-row td   { background: var(--blue-bg);  color: var(--blue); }
+  .compare-table tr.good-row td { background: var(--green-bg); color: var(--green); }
+  .compare-table tr.bad-row td  { background: var(--red-bg);   color: var(--red); }
+  .compare-table td:first-child { font-weight: 500; color: var(--muted); font-size: 9.5px; white-space: nowrap; }
+
+  /* ── Routing tier pipeline (screen 4) ── */
+  .tier-row {
+    display: flex; align-items: stretch; gap: 6px;
+    margin-bottom: 14px;
+  }
+  .tier-node {
+    flex: 1;
+    background: var(--surface2); border-radius: 10px;
+    padding: 10px 6px; text-align: center;
+    transition: all .55s cubic-bezier(0.4,0,0.2,1);
+  }
+  .tier-node.active {
+    background: var(--blue-bg);
+    box-shadow: 0 0 0 2px rgba(26,127,232,.22);
+    transform: translateY(-2px);
+  }
+  .tier-node.done { background: var(--green-bg); }
+  .tier-icon  { font-size: 20px; display: block; margin-bottom: 5px; }
+  .tier-label {
+    font-family: var(--font-mono); font-size: 9.5px; line-height: 1.4;
+    color: var(--muted);
+  }
+  .tier-node.active .tier-label { color: var(--blue); font-weight: 500; }
+  .tier-node.done   .tier-label { color: var(--green); }
+  .tier-arrow {
+    align-self: center;
+    color: var(--faint); font-size: 14px;
+    transition: color .55s ease;
+    flex-shrink: 0;
+  }
+  .tier-arrow.active { color: var(--blue); }
+
+  /* ── Stateful vs stateless panels (screen 5) ── */
+  .state-cols {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    margin-bottom: 12px;
+  }
+  .state-panel {
+    background: var(--surface2); border-radius: 10px; padding: 12px 13px;
+    opacity: 0; transform: translateY(12px);
+    transition: all .65s cubic-bezier(0.22,0.61,0.36,1);
+  }
+  .state-panel.show { opacity: 1; transform: none; }
+  .state-panel.badp.show  { background: var(--red-bg); }
+  .state-panel.goodp.show { background: var(--green-bg); }
+  .state-panel-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+    color: var(--muted);
+  }
+  .state-panel.badp.show  .state-panel-title { color: var(--red); }
+  .state-panel.goodp.show .state-panel-title { color: var(--green); }
+  .state-line {
+    font-size: 10.5px; line-height: 1.55; color: var(--muted);
+    padding: 3px 0; display: flex; gap: 6px; align-items: flex-start;
+  }
+  .state-line .sl-ico { flex-shrink: 0; }
+
+  @media (max-width: 560px) {
+    .stats-row, .concepts-grid, .intro-cards, .state-cols { grid-template-columns: 1fr; }
+    .tier-row { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+<div id="cinematic-overlay"></div>
+<div class="card">
+
+  <!-- ── Header ── -->
+  <div class="header">
+    <div class="header-left">
+      <div class="tag">🗄 Engineering Refresh</div>
+      <h1 id="header-title">Traffic Routing &amp; Load Balancing</h1>
+      <p id="header-sub">From one server with one IP to a global multi-tier routing stack — and why servers must forget.</p>
+    </div>
+    <div class="header-right">
+      <div class="module-num" id="module-num">Chapter 09</div>
+      <div class="audio-ctrl on" id="audio-ctrl" onclick="toggleAudio()">
+        <div class="audio-dot" style="background:var(--blue);animation:pulse 1.2s ease-in-out infinite"></div>
+        <span id="audio-label">Audio on</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step progress ── -->
+  <div class="progress-bar" id="progress-bar">
+    <div class="prog-step active" id="prog-0">Purpose</div>
+    <div class="prog-step"        id="prog-1">1 · One Server</div>
+    <div class="prog-step"        id="prog-2">2 · Meltdown</div>
+    <div class="prog-step"        id="prog-3">3 · Balancer</div>
+    <div class="prog-step"        id="prog-4">4 · Multi-Tier</div>
+    <div class="prog-step"        id="prog-5">5 · Stateless</div>
+    <div class="prog-step"        id="prog-6">6 · Summary</div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 0 — Purpose / Intro
+  ═════════════════════════════════════ -->
+  <div class="screen active" id="screen-0">
+    <div class="intro-screen">
+      <div class="narrator-dark" id="narrator"><div class="narrator-icon" style="font-size:15px;flex-shrink:0">🎙</div><div><span id="narrator-text"></span><span class="speaking-dots" id="speaking-dots" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+      <div class="intro-cards">
+        <div class="intro-card">
+          <span class="intro-card-icon">🚦</span>
+          <div class="intro-card-title">Every Request Needs a Route</div>
+          <div class="intro-card-text">Before any code runs, something must decide <em>which machine</em> answers. Routing is the front door of every system.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">🌍</span>
+          <div class="intro-card-title">Think Globally</div>
+          <div class="intro-card-text">100M users on six continents can't all hit one data center. Traffic must land close to home, then fan out smartly.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">🧊</span>
+          <div class="intro-card-title">No Hero Machines</div>
+          <div class="intro-card-text">A healthy system survives any single server dying mid-request. Servers are cattle, not pets.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">🎒</span>
+          <div class="intro-card-title">Stateless Wins</div>
+          <div class="intro-card-text">When servers remember nothing about users, any server can answer anything — and scaling becomes trivial.</div>
+        </div>
+      </div>
+
+      <div class="intro-inspiration">
+        <div class="intro-insp-icon">🚀</div>
+        <div class="intro-insp-body">
+          <div class="intro-insp-title">Why routing matters</div>
+          <div class="intro-insp-text">Facebook peaks at millions of HTTP requests every second. No machine on Earth can absorb that alone — so a routing stack of GeoDNS, load balancers, and API gateways slices the flood into streams that ordinary servers can drink. We will build that stack, tier by tier.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 1 — One Server, One IP
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-1">
+    <div class="narrator" id="narrator-1"><div class="narrator-icon">🎙</div><div><span id="narrator-text-1"></span><span class="speaking-dots" id="speaking-dots-1" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">One Server, One IP — 30 Users <span class="pill green">Simple</span></div>
+    <div class="screen-sub">DNS points the domain straight at a single machine. The entire "routing stack" is one A record.</div>
+
+    <div class="query-box"><span class="sql-cmt">; DNS zone — the entire routing layer</span>
+<span class="sql-fn">myapp.com.</span>   <span class="sql-kw">IN  A</span>   <span class="sql-num">203.0.113.7</span>   <span class="sql-cmt">-- points straight at ONE server</span></div>
+
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🗺 Request Path</div>
+    <svg class="lb-svg" viewBox="0 0 652 110" xmlns="http://www.w3.org/2000/svg">
+      <!-- Client -->
+      <rect id="s1n-client" x="30" y="28" width="110" height="54" rx="12" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+      <text x="85" y="50" text-anchor="middle" dominant-baseline="central" font-size="20">📱</text>
+      <text x="85" y="72" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#5a6478">Client</text>
+      <!-- DNS -->
+      <line x1="140" y1="55" x2="250" y2="55" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <text x="195" y="45" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#9aa3b5">myapp.com?</text>
+      <rect id="s1n-dns" x="250" y="28" width="130" height="54" rx="12" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+      <text x="315" y="48" text-anchor="middle" dominant-baseline="central" font-size="20">🌐</text>
+      <text x="315" y="68" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#5a6478">DNS</text>
+      <text x="315" y="80" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">name → IP</text>
+      <!-- App server -->
+      <line x1="380" y1="55" x2="490" y2="55" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <text x="435" y="45" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#9aa3b5">203.0.113.7</text>
+      <rect id="s1n-srv" x="490" y="28" width="130" height="54" rx="12" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+      <text x="555" y="48" text-anchor="middle" dominant-baseline="central" font-size="20">🖥</text>
+      <text x="555" y="68" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#5a6478">App Server</text>
+      <text x="555" y="80" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">handles 100%</text>
+      <!-- packet -->
+      <circle id="s1-pkt" cx="-20" cy="55" r="5" fill="#1a7fe8" opacity="0"/>
+    </svg>
+
+    <div class="divider"></div>
+
+    <div class="stats-row" id="s1-stats">
+      <div class="stat-card" id="s1-rps">
+        <div class="stat-label">Requests per second</div>
+        <div class="stat-val" id="s1-rps-val">—</div>
+        <div class="stat-note" id="s1-rps-note"></div>
+      </div>
+      <div class="stat-card" id="s1-rt">
+        <div class="stat-label">Response time</div>
+        <div class="stat-val" id="s1-rt-val">—</div>
+        <div class="stat-note" id="s1-rt-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 2 — Meltdown at 100M DAU
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-2">
+    <div class="narrator" id="narrator-2"><div class="narrator-icon">🎙</div><div><span id="narrator-text-2"></span><span class="speaking-dots" id="speaking-dots-2" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Same Setup — 100M+ DAU <span class="pill red">Breaking</span></div>
+    <div class="screen-sub">Every user on the planet resolves to the same single IP. One machine takes the entire internet's punch.</div>
+
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🌊 The Flood</div>
+    <svg class="lb-svg" viewBox="0 0 652 160" xmlns="http://www.w3.org/2000/svg">
+      <!-- crowd of clients -->
+      <g id="s2-crowd">
+        <text x="45"  y="28"  text-anchor="middle" font-size="18">📱</text>
+        <text x="105" y="20"  text-anchor="middle" font-size="18">💻</text>
+        <text x="45"  y="70"  text-anchor="middle" font-size="18">📱</text>
+        <text x="105" y="62"  text-anchor="middle" font-size="18">📱</text>
+        <text x="45"  y="112" text-anchor="middle" font-size="18">💻</text>
+        <text x="105" y="104" text-anchor="middle" font-size="18">📱</text>
+        <text x="45"  y="152" text-anchor="middle" font-size="18">📱</text>
+        <text x="105" y="146" text-anchor="middle" font-size="18">💻</text>
+        <text x="75"  y="88"  text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#e03e3e">×100,000,000</text>
+      </g>
+      <!-- converging lines -->
+      <line x1="120" y1="24"  x2="440" y2="76" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="120" y1="60"  x2="440" y2="80" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="120" y1="100" x2="440" y2="84" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="120" y1="142" x2="440" y2="88" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <text x="285" y="60" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#9aa3b5">2,000,000 concurrent connections</text>
+      <!-- one server -->
+      <rect id="s2n-srv" x="440" y="50" width="170" height="62" rx="12" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+      <text id="s2n-srv-ico" x="525" y="72" text-anchor="middle" dominant-baseline="central" font-size="22">🖥</text>
+      <text x="525" y="96" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#5a6478">The one server</text>
+      <text id="s2n-srv-sub" x="525" y="126" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#9aa3b5">capacity: ~10k connections</text>
+    </svg>
+
+    <div class="divider"></div>
+
+    <div class="stats-row" id="s2-stats">
+      <div class="stat-card" id="s2-conn">
+        <div class="stat-label">Concurrent connections</div>
+        <div class="stat-val" id="s2-conn-val">—</div>
+        <div class="stat-note" id="s2-conn-note"></div>
+      </div>
+      <div class="stat-card" id="s2-rt">
+        <div class="stat-label">Response time</div>
+        <div class="stat-val" id="s2-rt-val">—</div>
+        <div class="stat-note" id="s2-rt-note"></div>
+      </div>
+      <div class="stat-card" id="s2-cpu">
+        <div class="stat-label">CPU / memory</div>
+        <div class="stat-val" id="s2-cpu-val">—</div>
+        <div class="stat-note" id="s2-cpu-note"></div>
+      </div>
+      <div class="stat-card" id="s2-spof">
+        <div class="stat-label">Single point of failure</div>
+        <div class="stat-val" id="s2-spof-val">—</div>
+        <div class="stat-note" id="s2-spof-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 3 — The Load Balancer
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-3">
+    <div class="narrator" id="narrator-3"><div class="narrator-icon">🎙</div><div><span id="narrator-text-3"></span><span class="speaking-dots" id="speaking-dots-3" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">The Fix — Load Balancer <span class="pill blue">Solution</span></div>
+    <div class="screen-sub">One smart traffic distributor in front of many identical servers. DNS now points at the balancer, not a server.</div>
+
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">⚖️ Spreading the Load</div>
+    <svg class="lb-svg" viewBox="0 0 652 200" xmlns="http://www.w3.org/2000/svg">
+      <!-- clients -->
+      <text x="40" y="55"  text-anchor="middle" font-size="18">📱</text>
+      <text x="40" y="100" text-anchor="middle" font-size="18">💻</text>
+      <text x="40" y="145" text-anchor="middle" font-size="18">📱</text>
+      <line x1="58" y1="50"  x2="230" y2="92"  stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="58" y1="95"  x2="230" y2="100" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="58" y1="140" x2="230" y2="108" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <!-- load balancer -->
+      <rect id="s3n-lb" x="230" y="68" width="140" height="64" rx="12" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+      <text x="300" y="90" text-anchor="middle" dominant-baseline="central" font-size="22">⚖️</text>
+      <text x="300" y="112" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="11" fill="#5a6478">Load Balancer</text>
+      <text x="300" y="125" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#9aa3b5">round_robin + health checks</text>
+      <!-- fan-out lines -->
+      <line x1="370" y1="82"  x2="490" y2="28"  stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="370" y1="94"  x2="490" y2="76"  stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="370" y1="106" x2="490" y2="124" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="370" y1="118" x2="490" y2="172" stroke="#dde1ea" stroke-width="1" stroke-dasharray="4 3"/>
+      <!-- 4 app servers -->
+      <rect id="s3n-a" x="490" y="8"   width="130" height="38" rx="10" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+      <text x="555" y="27"  text-anchor="middle" dominant-baseline="central" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#5a6478">🖥 App Server 1</text>
+      <rect id="s3n-b" x="490" y="56"  width="130" height="38" rx="10" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+      <text x="555" y="75"  text-anchor="middle" dominant-baseline="central" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#5a6478">🖥 App Server 2</text>
+      <rect id="s3n-c" x="490" y="104" width="130" height="38" rx="10" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+      <text x="555" y="123" text-anchor="middle" dominant-baseline="central" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#5a6478">🖥 App Server 3</text>
+      <rect id="s3n-d" x="490" y="152" width="130" height="38" rx="10" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+      <text x="555" y="171" text-anchor="middle" dominant-baseline="central" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#5a6478">🖥 App Server 4</text>
+      <!-- animated packets -->
+      <circle id="s3-pkt-0" cx="-20" cy="100" r="5" fill="#1a7fe8" opacity="0"/>
+      <circle id="s3-pkt-1" cx="-20" cy="100" r="5" fill="#7c3aed" opacity="0"/>
+      <circle id="s3-pkt-2" cx="-20" cy="100" r="5" fill="#18a864" opacity="0"/>
+      <circle id="s3-pkt-3" cx="-20" cy="100" r="5" fill="#d97b10" opacity="0"/>
+    </svg>
+
+    <!-- Routing algorithms — hidden until reveal -->
+    <div id="s3-algos" style="display:none">
+      <div class="divider"></div>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🧮 How the Balancer Chooses a Server</div>
+      <table class="compare-table">
+        <thead>
+          <tr><th>Algorithm</th><th>How it picks</th><th>Great for</th><th>Watch out</th></tr>
+        </thead>
+        <tbody>
+          <tr id="alg-0"><td>Round Robin</td><td>Rotate through servers in order — 1, 2, 3, 4, repeat</td><td>Simple, even spread</td><td>Ignores real server load</td></tr>
+          <tr id="alg-1"><td>Least Connections</td><td>Pick the server with the fewest active requests</td><td>Mixed slow/fast requests</td><td>Needs live connection state</td></tr>
+          <tr id="alg-2"><td>Consistent Hash</td><td>Same user → same server, via hash(client)</td><td>Cache-friendly routing</td><td>Hot users create hot servers</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Result stats — hidden until reveal -->
+    <div class="stats-row" id="s3-stats" style="display:none">
+      <div class="stat-card" id="s3-rps">
+        <div class="stat-label">Requests handled</div>
+        <div class="stat-val" id="s3-rps-val">—</div>
+        <div class="stat-note" id="s3-rps-note"></div>
+      </div>
+      <div class="stat-card" id="s3-fo">
+        <div class="stat-label">Failover time</div>
+        <div class="stat-val" id="s3-fo-val">—</div>
+        <div class="stat-note" id="s3-fo-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 4 — Multi-Tier + API Gateway
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-4">
+    <div class="narrator" id="narrator-4"><div class="narrator-icon">🎙</div><div><span id="narrator-text-4"></span><span class="speaking-dots" id="speaking-dots-4" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Going Global — Multi-Tier Routing <span class="pill purple">Deep Dive</span></div>
+    <div class="screen-sub">One balancer is not enough for the planet. Real systems route in tiers — each tier narrows the decision.</div>
+
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🗼 The Four Routing Tiers</div>
+    <div class="tier-row" id="tier-row">
+      <div class="tier-node" id="tier-0">
+        <span class="tier-icon">🌍</span>
+        <span class="tier-label">GeoDNS<br>nearest DC</span>
+      </div>
+      <div class="tier-arrow" id="tarr-0">→</div>
+      <div class="tier-node" id="tier-1">
+        <span class="tier-icon">🏢</span>
+        <span class="tier-label">L4 Balancer<br>TCP spread</span>
+      </div>
+      <div class="tier-arrow" id="tarr-1">→</div>
+      <div class="tier-node" id="tier-2">
+        <span class="tier-icon">🚪</span>
+        <span class="tier-label">API Gateway<br>L7 traffic cop</span>
+      </div>
+      <div class="tier-arrow" id="tarr-2">→</div>
+      <div class="tier-node" id="tier-3">
+        <span class="tier-icon">🧩</span>
+        <span class="tier-label">Microservices<br>do the work</span>
+      </div>
+    </div>
+
+    <!-- Gateway routing sample — hidden until reveal -->
+    <div id="s4-route" style="display:none">
+      <div class="query-box"><span class="sql-cmt">-- The API Gateway reads the URL and routes by path</span>
+<span class="sql-kw">GET</span> <span class="sql-fn">/feed</span>      →  Feed Service      <span class="sql-cmt">-- + auth check, rate limit</span>
+<span class="sql-kw">POST</span> <span class="sql-fn">/post</span>     →  Post Service
+<span class="sql-kw">GET</span> <span class="sql-fn">/media/*</span>  →  Media Service     <span class="sql-cmt">-- services stay hidden behind the door</span></div>
+    </div>
+
+    <!-- Tier breakdown table — hidden until reveal -->
+    <div id="s4-table" style="display:none">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">📋 What Each Tier Decides</div>
+      <table class="compare-table">
+        <thead>
+          <tr><th>Tier</th><th>Decides</th><th>Example</th><th>Speed</th></tr>
+        </thead>
+        <tbody>
+          <tr id="ttr-0"><td>GeoDNS</td><td>Which data center, by geography</td><td>User in Colombo → Singapore DC</td><td>~0ms (cached)</td></tr>
+          <tr id="ttr-1"><td>L4 Balancer</td><td>Which gateway machine (raw TCP)</td><td>Spread millions of connections</td><td>&lt;1ms, no HTTP parsing</td></tr>
+          <tr id="ttr-2"><td>API Gateway</td><td>Which microservice (reads URL)</td><td>/feed → Feed Svc + auth + limits</td><td>~2ms per request</td></tr>
+          <tr id="ttr-3"><td>Service LB</td><td>Which service instance</td><td>Feed Svc replica 7 of 200</td><td>&lt;1ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="verdict success" id="s4-verdict" style="display:none">
+      <div class="verdict-icon">🚪</div>
+      <div>
+        <div class="verdict-title">The gateway is a traffic cop, not a worker</div>
+        <div class="verdict-body">It routes, authenticates, and rate-limits — but never runs business logic. Clients see one clean front door; behind it, hundreds of microservices can be added, moved, or replaced without any client noticing.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 5 — Stateless Services
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-5">
+    <div class="narrator" id="narrator-5"><div class="narrator-icon">🎙</div><div><span id="narrator-text-5"></span><span class="speaking-dots" id="speaking-dots-5" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Stateless Services <span class="pill purple">Key Distinction</span></div>
+    <div class="screen-sub">Load balancing only works if <em style="color:var(--green);font-style:normal;font-weight:600">any server</em> can handle <em style="color:var(--blue);font-style:normal;font-weight:600">any request</em>. That requires servers that remember nothing.</div>
+
+    <div class="state-cols">
+      <div class="state-panel badp" id="sp-bad">
+        <div class="state-panel-title"><span>😰</span> Stateful — session in server RAM</div>
+        <div class="state-line"><span class="sl-ico">📌</span><span>Your login session lives in Server 2's memory — the balancer must "pin" you to Server 2 forever (sticky sessions).</span></div>
+        <div class="state-line"><span class="sl-ico">⚡</span><span>Server 2 gets overloaded? Tough — your requests can't move.</span></div>
+        <div class="state-line"><span class="sl-ico">💥</span><span>Server 2 crashes? You're logged out mid-scroll. So is everyone else pinned there.</span></div>
+      </div>
+      <div class="state-panel goodp" id="sp-good">
+        <div class="state-panel-title"><span>😎</span> Stateless — session in Redis / JWT</div>
+        <div class="state-line"><span class="sl-ico">🎒</span><span>Session lives in a shared store (Redis) or travels inside a signed token (JWT). Servers keep nothing local.</span></div>
+        <div class="state-line"><span class="sl-ico">🔀</span><span>Request 1 → Server 3, request 2 → Server 8. Nobody cares. Any server, any request.</span></div>
+        <div class="state-line"><span class="sl-ico">🗑</span><span>A server crashes? The balancer stops sending it traffic. Zero users notice.</span></div>
+      </div>
+    </div>
+
+    <div id="s5-table" style="display:none">
+      <table class="compare-table">
+        <thead>
+          <tr><th>&nbsp;</th><th>Stateful</th><th>Stateless</th></tr>
+        </thead>
+        <tbody>
+          <tr id="str-0"><td>Session lives</td><td>Server RAM</td><td>Redis / signed JWT</td></tr>
+          <tr id="str-1"><td>Balancer freedom</td><td>Sticky sessions required</td><td>Any server, any request</td></tr>
+          <tr id="str-2"><td>Server dies</td><td>Users logged out</td><td>Zero user impact</td></tr>
+          <tr id="str-3"><td>Adding capacity</td><td>Painful rebalancing</td><td>Boot a machine — done</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="verdict success" id="s5-verdict" style="display:none">
+      <div class="verdict-icon">🔑</div>
+      <div>
+        <div class="verdict-title">Statelessness is what makes load balancing actually work</div>
+        <div class="verdict-body">A load balancer with stateful servers is a traffic cop directing cars that can only park in one specific spot. Move all user state into shared stores, and every server becomes interchangeable — that's the moment scaling turns into simply adding machines.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 6 — Summary
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-6">
+    <div class="narrator" id="narrator-6"><div class="narrator-icon">🎙</div><div><span id="narrator-text-6"></span><span class="speaking-dots" id="speaking-dots-6" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Key Takeaways</div>
+    <div class="screen-sub">What every engineer should know about traffic routing and load balancing.</div>
+
+    <div class="concepts-grid">
+      <div class="concept-card">
+        <div class="concept-icon">⚖️</div>
+        <div class="concept-title">Load Balancer</div>
+        <div class="concept-body">Spreads requests across many identical servers. Health checks evict dead machines within seconds — failures become invisible.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">🌍</div>
+        <div class="concept-title">Multi-Tier Routing</div>
+        <div class="concept-body">GeoDNS picks the data center. L4 spreads raw TCP. L7 gateway reads the URL. Each tier narrows one decision — fast checks first.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">🚪</div>
+        <div class="concept-title">API Gateway</div>
+        <div class="concept-body">One front door for all clients: path routing, auth, rate limiting. Microservices stay hidden and can evolve freely behind it.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">🎒</div>
+        <div class="concept-title">Stateless Services</div>
+        <div class="concept-body">No local memory of users — session state lives in Redis or JWTs. Any server handles any request, so servers become disposable.</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="verdict success">
+      <div class="verdict-icon">💡</div>
+      <div>
+        <div class="verdict-title">The rule of thumb</div>
+        <div class="verdict-body">Scale out, not up. One giant server always melts eventually; many disposable servers behind a balancer never do — but only if they're stateless. Make every server forgettable, and adding capacity stops being engineering and starts being shopping.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Footer nav ── -->
+  <div class="footer">
+    <div class="footer-left">
+      <button class="btn ghost" id="btn-prev" onclick="prevScreen()" disabled>← Back</button>
+      <button class="btn blue"  id="btn-next" onclick="nextScreen()">Next →</button>
+    </div>
+    <div class="footer-right">
+      <button class="btn amber" id="btn-auto" onclick="runAuto()">▶ Auto demo</button>
+      <button class="btn ghost" id="btn-pause" onclick="togglePause()" style="display:none">⏸ Pause</button>
+      <button class="btn ghost" id="btn-restart" onclick="restart()">↺ Restart</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════
+// AUDIO ENGINE
+// ═══════════════════════════
+let audioEnabled = true;
+let audioCtx = null;
+
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function toggleAudio() {
+  audioEnabled = !audioEnabled;
+  const ctrl  = document.getElementById('audio-ctrl');
+  const label = document.getElementById('audio-label');
+  ctrl.className  = 'audio-ctrl' + (audioEnabled ? ' on' : '');
+  label.textContent = audioEnabled ? 'Audio on' : 'Audio off';
+  if (!audioEnabled) { window.speechSynthesis.cancel(); }
+  else { try { getCtx().resume(); } catch(e) {} speak("Audio enabled.", 0, null); }
+}
+
+let _cancelToken  = 0;
+let _charOffset   = 0;
+let _pausedText   = '';
+let _pausedIdx    = 0;
+let _pausedOnEnd  = null;
+let _pausedResolve = null;
+
+function _getVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  return voices.find(v => v.lang.startsWith('en') && (
+    v.name.includes('Google') || v.name.includes('Samantha') ||
+    v.name.includes('Daniel') || v.name.includes('Alex')
+  )) || voices.find(v => v.lang.startsWith('en'));
+}
+
+function _showNarrator(screenIdx, text) {
+  const suffix  = screenIdx > 0 ? '-'+screenIdx : '';
+  const ntxt    = document.getElementById('narrator-text'  + suffix);
+  const ndots   = document.getElementById('speaking-dots'  + suffix);
+  const nbubble = document.getElementById('narrator'       + suffix);
+  if (ntxt)    ntxt.textContent = text;
+  if (ndots)   ndots.style.display = 'inline';
+  if (nbubble) nbubble.classList.add('visible');
+}
+
+function _hideNarrator(screenIdx) {
+  const suffix  = screenIdx > 0 ? '-'+screenIdx : '';
+  const ndots   = document.getElementById('speaking-dots' + suffix);
+  const nbubble = document.getElementById('narrator'      + suffix);
+  if (ndots)   ndots.style.display = 'none';
+  if (nbubble) nbubble.classList.remove('visible');
+}
+
+function _doSpeak(text, startChar, screenIdx, onEnd, token) {
+  window.speechSynthesis.cancel();
+  const remaining = text.slice(startChar);
+  if (!remaining.trim()) { if (onEnd) onEnd(); return; }
+  _showNarrator(screenIdx, text);
+  const utter = new SpeechSynthesisUtterance(remaining);
+  utter.rate  = 0.95;
+  utter.pitch = 1.0;
+  const v = _getVoice();
+  if (v) utter.voice = v;
+  utter.onboundary = (e) => {
+    if (_cancelToken !== token) return;
+    if (e.name === 'word') _charOffset = startChar + (e.charIndex || 0);
+  };
+  utter.onend = () => {
+    if (_cancelToken !== token) return;
+    _hideNarrator(screenIdx);
+    _pausedText = ''; _charOffset = 0; _pausedOnEnd = null;
+    if (onEnd) onEnd();
+  };
+  utter.onerror = (e) => {
+    if (_cancelToken !== token) return;
+    if (e.error === 'interrupted' || e.error === 'canceled') return;
+    _hideNarrator(screenIdx);
+    if (onEnd) onEnd();
+  };
+  window.speechSynthesis.speak(utter);
+}
+
+function speak(text, screenIdx, onEnd) {
+  if (!audioEnabled) { if (onEnd) onEnd(); return; }
+  _cancelToken++;
+  const myToken = _cancelToken;
+  _charOffset = 0; _pausedText = text; _pausedIdx = screenIdx; _pausedOnEnd = onEnd;
+  _doSpeak(text, 0, screenIdx, onEnd, myToken);
+}
+
+function speakWait(text, screenIdx) {
+  return new Promise(resolve => speak(text, screenIdx, resolve));
+}
+
+function tone(freq, type, dur, vol=0.12) {
+  if (!audioEnabled) return;
+  try {
+    const ctx = getCtx(), osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.connect(g); g.connect(ctx.destination);
+    osc.type = type; osc.frequency.value = freq;
+    g.gain.setValueAtTime(vol, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.start(); osc.stop(ctx.currentTime + dur);
+  } catch(e) {}
+}
+const sfx = {
+  click:   () => tone(700, 'sine', 0.07, 0.08),
+  data:    () => tone(1100, 'square', 0.04, 0.05),
+  success: () => [523,659,784,1047].forEach((f,i) => setTimeout(() => tone(f,'sine',.18,.11), i*80)),
+  warn:    () => [440,370,311].forEach((f,i) => setTimeout(() => tone(f,'sawtooth',.15,.10), i*100)),
+  error:   () => [190,160].forEach((f,i) => setTimeout(() => tone(f,'sawtooth',.25,.14), i*120)),
+  pop:     () => tone(900, 'sine', 0.06, 0.09),
+  chord:   () => [261,329,392,523].forEach((f,i) => setTimeout(() => tone(f,'sine',.28,.09), i*55)),
+};
+
+// ═══════════════════════════
+// SCREEN ENGINE
+// ═══════════════════════════
+let currentScreen = 0;
+const TOTAL = 7;
+let busy = false;
+let paused = false;
+
+function delay(ms) {
+  return new Promise(resolve => {
+    const start = Date.now();
+    function tick() {
+      if (paused) { setTimeout(tick, 100); return; }
+      const elapsed = Date.now() - start;
+      if (elapsed >= ms) resolve();
+      else setTimeout(tick, Math.min(100, ms - elapsed));
+    }
+    tick();
+  });
+}
+
+function updateHeader(idx) {
+  const h1  = document.getElementById('header-title');
+  const sub = document.getElementById('header-sub');
+  const mod = document.getElementById('module-num');
+  if (!h1 || !sub || !mod) return;
+  if (h1.dataset.screen === String(idx)) return;
+  h1.dataset.screen = String(idx);
+
+  const isIntro = idx === 0;
+  const title    = isIntro
+    ? 'Architecture Thinking <span style="color:var(--blue)">for AI-Assisted Development</span>'
+    : 'Traffic Routing &amp; Load Balancing';
+  const subtitle = isIntro
+    ? 'Learn how real systems evolve — and how to work smarter with AI.'
+    : 'From one server with one IP to a global multi-tier routing stack — and why servers must forget.';
+
+  h1.classList.add('fading');
+  sub.classList.add('fading');
+  mod.classList.add('fading');
+  setTimeout(() => {
+    h1.innerHTML    = title;
+    sub.textContent = subtitle;
+    mod.textContent = 'Chapter 09';
+    h1.classList.remove('fading');
+    sub.classList.remove('fading');
+    mod.classList.remove('fading');
+  }, 550);
+}
+
+function showScreen(idx) {
+  document.querySelectorAll('.screen').forEach((s, i) => s.classList.toggle('active', i === idx));
+  for (let i = 0; i < TOTAL; i++) {
+    const p = document.getElementById('prog-'+i);
+    if (!p) continue;
+    p.className = 'prog-step' + (i < idx ? ' done' : i === idx ? ' active' : '');
+  }
+  if (idx > 2) {
+    const p2 = document.getElementById('prog-2');
+    if (p2) p2.className = 'prog-step warn done';
+  }
+  currentScreen = idx;
+  updateHeader(idx);
+  document.getElementById('btn-prev').disabled = idx === 0;
+  const btnNext = document.getElementById('btn-next');
+  btnNext.disabled = idx === TOTAL - 1;
+  btnNext.style.display = idx === TOTAL - 1 ? 'none' : 'flex';
+}
+
+// ── Pause / Resume ──
+function showPauseBtn(show) {
+  const btn = document.getElementById('btn-pause');
+  if (!btn) return;
+  btn.style.display = show ? 'flex' : 'none';
+  if (!show) {
+    paused = false;
+    btn.textContent = '⏸ Pause';
+    btn.classList.remove('blue');
+    btn.classList.add('ghost');
+  }
+}
+
+function togglePause() {
+  const btn = document.getElementById('btn-pause');
+  paused = !paused;
+  if (paused) {
+    window.speechSynthesis.cancel();
+    btn.textContent = '▶ Resume';
+    btn.classList.add('blue');
+    btn.classList.remove('ghost');
+  } else {
+    btn.textContent = '⏸ Pause';
+    btn.classList.remove('blue');
+    btn.classList.add('ghost');
+    if (_pausedText) {
+      _doSpeak(_pausedText, _charOffset, _pausedIdx, _pausedOnEnd, _cancelToken);
+    }
+    if (_pausedResolve) { _pausedResolve(); _pausedResolve = null; }
+  }
+}
+
+// ── SVG helpers ──
+function setNode(id, fill, stroke) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.transition = 'fill .6s ease, stroke .6s ease';
+  el.style.fill = fill;
+  el.style.stroke = stroke;
+}
+
+// Animate a packet circle from (x1,y1) → (x2,y2) inside SVG coords
+function movePacket(id, x1, y1, x2, y2, dur) {
+  return new Promise(resolve => {
+    const pkt = document.getElementById(id);
+    if (!pkt) { resolve(); return; }
+    pkt.setAttribute('opacity', '1');
+    const start = performance.now();
+    function frame(now) {
+      if (paused) { requestAnimationFrame(frame); return; }
+      const t = Math.min(1, (now - start) / dur);
+      const ease = t < .5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2;
+      pkt.setAttribute('cx', x1 + (x2 - x1) * ease);
+      pkt.setAttribute('cy', y1 + (y2 - y1) * ease);
+      if (t < 1) requestAnimationFrame(frame);
+      else { pkt.setAttribute('opacity', '0'); resolve(); }
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+// ═══════════════════════════
+// SCREEN ANIMATIONS
+// ═══════════════════════════
+
+async function animateScreen0() {
+  document.querySelectorAll('.intro-card').forEach(c => c.classList.remove('animating'));
+  const inspEl = document.querySelector('.intro-inspiration');
+  if (inspEl) inspEl.classList.remove('animating');
+
+  await speakWait("Welcome to Engineering Refresh. This chapter explores Traffic Routing and Load Balancing — how millions of requests find their way to a machine that can actually serve them.", 0);
+  await delay(600);
+
+  const cards = document.querySelectorAll('.intro-card');
+  for (let i = 0; i < cards.length; i++) {
+    sfx.data();
+    cards[i].classList.add('animating');
+    await delay(1400);
+  }
+
+  await delay(400);
+  if (inspEl) inspEl.classList.add('animating');
+  sfx.pop();
+  await delay(800);
+
+  await speakWait("Facebook peaks at millions of requests every second. No single machine on Earth can absorb that — so we will build the routing stack that spreads the flood.", 0);
+  await delay(400);
+}
+
+async function animateScreen1Intro() {
+  await speakWait("Let's start with Traffic Routing and Load Balancing.", 1);
+  await delay(800);
+  await speakWait("The central concept is the load balancer — a traffic distributor that spreads incoming requests across many identical servers, so no single machine gets overwhelmed.", 1);
+  await delay(800);
+  await speakWait("We begin with the simplest possible setup — one server, one IP address — and watch exactly how it melts when the whole world shows up.", 1);
+  await delay(1000);
+}
+
+async function animateScreen1() {
+  await speakWait("At 30 users, routing barely exists. DNS resolves your domain name to a single IP address — the one and only server. Every request goes there.", 1);
+  await delay(600);
+
+  // Light nodes up in path order + packet run
+  sfx.data();
+  setNode('s1n-client', '#e8f2fd', '#1a7fe8');
+  await delay(700);
+  await movePacket('s1-pkt', 140, 55, 250, 55, 700);
+  sfx.data();
+  setNode('s1n-dns', '#e8f2fd', '#1a7fe8');
+  await delay(700);
+  await movePacket('s1-pkt', 380, 55, 490, 55, 700);
+  sfx.data();
+  setNode('s1n-srv', '#e6f7f0', '#18a864');
+  await delay(800);
+
+  // Reveal stats
+  sfx.data();
+  const rpsEl = document.getElementById('s1-rps');
+  rpsEl.className = 'stat-card good';
+  document.getElementById('s1-rps-val').textContent  = '~12 req/s';
+  document.getElementById('s1-rps-note').textContent = '✓ Laptop-grade traffic';
+  await delay(1100);
+
+  sfx.data();
+  const rtEl = document.getElementById('s1-rt');
+  rtEl.className = 'stat-card good';
+  document.getElementById('s1-rt-val').textContent  = '45 ms';
+  document.getElementById('s1-rt-note').textContent = '✓ Zero routing overhead';
+  await delay(900);
+
+  sfx.success();
+  await speakWait("Twelve requests per second, 45 millisecond responses. One server handles everything with room to spare. Simple, cheap, perfect — for now.", 1);
+}
+
+async function animateScreen1Full() {
+  await animateScreen1Intro();
+  await animateScreen1();
+}
+
+async function animateScreen2() {
+  await speakWait("Now scale to 100 million daily active users. DNS still resolves everyone on the planet to that same single IP. Two million concurrent connections converge on one machine built for ten thousand.", 2);
+  sfx.warn();
+  await delay(800);
+
+  // Server turns red
+  sfx.error();
+  setNode('s2n-srv', '#fdeaea', '#e03e3e');
+  const ico = document.getElementById('s2n-srv-ico');
+  if (ico) ico.textContent = '🔥';
+  const sub = document.getElementById('s2n-srv-sub');
+  if (sub) { sub.textContent = 'capacity exceeded 200×'; sub.style.fill = '#e03e3e'; }
+  await delay(900);
+
+  const cards = [
+    { id:'s2-conn', val:'2M+',     note:'✗ Server caps out near ~10k' },
+    { id:'s2-rt',   val:'TIMEOUT', note:'✗ Requests queue, then drop' },
+    { id:'s2-cpu',  val:'100%',    note:'✗ Thrashing, out-of-memory kills' },
+    { id:'s2-spof', val:'YES',     note:'✗ One crash = global outage' },
+  ];
+
+  for (const c of cards) {
+    sfx.error();
+    const el = document.getElementById(c.id);
+    el.className = 'stat-card bad';
+    document.getElementById(c.id+'-val').textContent  = c.val;
+    document.getElementById(c.id+'-note').textContent = c.note;
+    await delay(950);
+  }
+
+  await speakWait("The server melts instantly. Connections time out, the CPU pins at 100 percent, and when the machine finally crashes — the entire product is down for every user on Earth. One machine was one catastrophe waiting to happen.", 2);
+}
+
+async function animateScreen3() {
+  await speakWait("The fix is a load balancer. DNS now points at the balancer instead of a server. Behind it sits a fleet of identical app servers — and the balancer's only job is deciding which one answers each request.", 3);
+  await delay(700);
+
+  // Light up the balancer
+  sfx.chord();
+  setNode('s3n-lb', '#e8f2fd', '#1a7fe8');
+  await delay(900);
+
+  // Reveal servers one by one
+  const servers = ['s3n-a','s3n-b','s3n-c','s3n-d'];
+  for (const id of servers) {
+    sfx.data();
+    setNode(id, '#e6f7f0', '#18a864');
+    await delay(650);
+  }
+
+  await speakWait("Watch it distribute. Request one goes to server one. Request two to server two. Round and round — no machine ever takes more than its share.", 3);
+
+  // Round-robin packet animation: LB → each server
+  const targets = [
+    { pkt:'s3-pkt-0', x2:555, y2:27  },
+    { pkt:'s3-pkt-1', x2:555, y2:75  },
+    { pkt:'s3-pkt-2', x2:555, y2:123 },
+    { pkt:'s3-pkt-3', x2:555, y2:171 },
+  ];
+  for (const t of targets) {
+    sfx.pop();
+    await movePacket(t.pkt, 370, 100, t.x2, t.y2, 550);
+    await delay(120);
+  }
+  sfx.chord();
+  await delay(500);
+
+  // Reveal algorithms table
+  document.getElementById('s3-algos').style.display = 'block';
+  document.getElementById('s3-algos').style.animation = 'fadeIn .9s ease';
+  await speakWait("How does it choose? Three classic algorithms. Round robin simply rotates. Least connections picks the least busy server. Consistent hashing sends the same user to the same server — great for warm caches.", 3);
+
+  const rows = ['alg-0','alg-1','alg-2'];
+  for (const id of rows) {
+    sfx.data();
+    document.getElementById(id).className = 'hl-row';
+    await delay(850);
+    document.getElementById(id).className = '';
+  }
+  await delay(300);
+
+  // Reveal result stats
+  document.getElementById('s3-stats').style.display = 'grid';
+  sfx.data();
+  const rpsEl = document.getElementById('s3-rps');
+  rpsEl.className = 'stat-card good';
+  document.getElementById('s3-rps-val').textContent  = '1M+ req/s';
+  document.getElementById('s3-rps-note').textContent = '✓ Just add servers to add capacity';
+  await delay(1100);
+
+  sfx.data();
+  const foEl = document.getElementById('s3-fo');
+  foEl.className = 'stat-card good';
+  document.getElementById('s3-fo-val').textContent  = '< 5 s';
+  document.getElementById('s3-fo-note').textContent = '✓ Health checks evict dead servers';
+  await delay(800);
+
+  sfx.success();
+  await speakWait("And the balancer constantly health-checks the fleet. A server stops responding? It's pulled out of rotation within seconds. Failures become invisible to users.", 3);
+}
+
+async function animateScreen4() {
+  await speakWait("One load balancer works for one data center. Facebook operates dozens of data centers across the globe — so routing happens in tiers. Let's walk through all four.", 4);
+  await delay(700);
+
+  const tiers = [
+    { node: 0, arr: 0, text: "Tier one: GeoDNS. When your phone resolves the domain, DNS answers with the IP of the nearest data center. A user in Colombo lands in Singapore, not Oregon — saving 200 milliseconds of round trip before a single byte of the app is involved." },
+    { node: 1, arr: 1, text: "Tier two: the Layer 4 balancer. It works at the raw TCP level — no reading of URLs, just spreading millions of connections across the gateway fleet at blinding speed." },
+    { node: 2, arr: 2, text: "Tier three: the API Gateway. This is the traffic cop. It reads the URL — slash feed goes to the Feed Service, slash post to the Post Service. It also checks your auth token and enforces rate limits, all in about two milliseconds." },
+    { node: 3, arr: null, text: "Tier four: each microservice has its own internal balancer, picking one healthy replica out of hundreds. Only now does business logic actually run." },
+  ];
+
+  for (const t of tiers) {
+    const node = document.getElementById('tier-'+t.node);
+    const arr  = t.arr !== null ? document.getElementById('tarr-'+t.arr) : null;
+    node.className = 'tier-node active';
+    if (arr) arr.className = 'tier-arrow active';
+    sfx.data();
+    await speakWait(t.text, 4);
+    node.className = 'tier-node done';
+    await delay(350);
+  }
+  sfx.chord();
+  await delay(500);
+
+  // Reveal gateway routing sample
+  document.getElementById('s4-route').style.display = 'block';
+  document.getElementById('s4-route').style.animation = 'fadeIn .9s ease';
+  sfx.data();
+  await delay(1200);
+
+  // Reveal tier table
+  document.getElementById('s4-table').style.display = 'block';
+  document.getElementById('s4-table').style.animation = 'fadeIn .9s ease';
+  const rows = ['ttr-0','ttr-1','ttr-2','ttr-3'];
+  for (const id of rows) {
+    sfx.data();
+    document.getElementById(id).className = 'hl-row';
+    await delay(800);
+    document.getElementById(id).className = '';
+  }
+  await delay(300);
+
+  // Verdict
+  document.getElementById('s4-verdict').style.display = 'flex';
+  document.getElementById('s4-verdict').style.animation = 'fadeIn .9s ease';
+  sfx.success();
+  await delay(500);
+
+  await speakWait("Notice the pattern: cheap decisions first, expensive decisions last. Geography is decided before TCP, TCP before HTTP, HTTP before business logic. Every tier narrows exactly one question.", 4);
+}
+
+async function animateScreen5() {
+  await speakWait("There is one hidden requirement that makes all of this work: the servers behind the balancer must be stateless. Let's see why with the classic sticky session problem.", 5);
+  await delay(600);
+
+  // Reveal stateful panel
+  sfx.warn();
+  document.getElementById('sp-bad').classList.add('show');
+  await speakWait("The stateful trap: your login session lives in server two's memory. Now the balancer is handcuffed — it must pin you to server two forever. If server two overloads, your requests can't move. If it crashes, you're logged out mid-scroll, along with everyone else pinned there.", 5);
+  await delay(600);
+
+  // Reveal stateless panel
+  sfx.chord();
+  document.getElementById('sp-good').classList.add('show');
+  await speakWait("The stateless fix: move the session out of the server — into a shared Redis store, or into a signed JWT token that travels with every request. Now servers remember nothing. Request one hits server three, request two hits server eight, and nobody cares.", 5);
+  await delay(600);
+
+  // Comparison table
+  document.getElementById('s5-table').style.display = 'block';
+  document.getElementById('s5-table').style.animation = 'fadeIn .9s ease';
+  const rows = ['str-0','str-1','str-2','str-3'];
+  for (const id of rows) {
+    sfx.data();
+    document.getElementById(id).className = 'hl-row';
+    await delay(800);
+    document.getElementById(id).className = '';
+  }
+  await delay(300);
+
+  // Verdict
+  document.getElementById('s5-verdict').style.display = 'flex';
+  document.getElementById('s5-verdict').style.animation = 'fadeIn .9s ease';
+  sfx.success();
+  await delay(500);
+
+  await speakWait("This is the key insight of the whole chapter. Statelessness is what turns a fleet of servers into one elastic pool. When any server can handle any request, a crashed machine costs nothing and a new machine helps instantly.", 5);
+}
+
+async function animateScreen6() {
+  await speakWait("The key lesson: scale out, not up. Put a load balancer in front of many identical servers. Route in tiers — geography first, then TCP, then the API gateway reading URLs. And keep every server stateless, so any machine can handle any request. Make servers forgettable, and adding capacity stops being engineering and starts being shopping.", 6);
+  sfx.success();
+}
+
+const screenAnimations = [
+  animateScreen0,
+  animateScreen1Full,
+  animateScreen2,
+  animateScreen3,
+  animateScreen4,
+  animateScreen5,
+  animateScreen6,
+];
+
+// ═══════════════════════════
+// NAVIGATION
+// ═══════════════════════════
+async function beginModule() {
+  if (busy) return;
+  busy = true;
+  paused = false;
+  sfx.click();
+  showPauseBtn(true);
+
+  const introScreen  = document.getElementById('screen-0');
+  const nextScreenEl = document.getElementById('screen-1');
+  const overlay      = document.getElementById('cinematic-overlay');
+
+  introScreen.classList.add('sliding-out');
+  await delay(680);
+
+  introScreen.classList.remove('sliding-out');
+  introScreen.classList.remove('active');
+  overlay.classList.add('fade-in');
+  await delay(700);
+
+  nextScreenEl.classList.add('active');
+  currentScreen = 1;
+  updateHeader(1);
+  document.getElementById('btn-prev').disabled = false;
+  document.getElementById('prog-0').className = 'prog-step done';
+  document.getElementById('prog-1').className = 'prog-step active';
+
+  overlay.classList.remove('fade-in');
+  overlay.classList.add('fade-out');
+  nextScreenEl.classList.add('slide-in');
+  await delay(800);
+  nextScreenEl.classList.remove('slide-in');
+  overlay.classList.remove('fade-out');
+
+  window.speechSynthesis.cancel();
+  await animateScreen1Intro();
+  await animateScreen1();
+  showPauseBtn(false);
+  busy = false;
+}
+
+async function goToScreen(idx, animate=true) {
+  if (busy) return;
+  busy = true;
+  _cancelToken++;
+  window.speechSynthesis.cancel();
+  _pausedText = '';
+  paused = false;
+  showScreen(idx);
+  showPauseBtn(true);
+  if (animate) await screenAnimations[idx]();
+  showPauseBtn(false);
+  busy = false;
+}
+
+async function nextScreen() {
+  if (currentScreen < TOTAL - 1) {
+    _cancelToken++;
+    window.speechSynthesis.cancel();
+    _pausedText = '';
+    busy = false;
+    paused = false;
+    showPauseBtn(false);
+    sfx.click();
+    await goToScreen(currentScreen + 1);
+  }
+}
+
+async function prevScreen() {
+  if (currentScreen > 0) {
+    _cancelToken++;
+    window.speechSynthesis.cancel();
+    _pausedText = '';
+    busy = false;
+    paused = false;
+    showPauseBtn(false);
+    sfx.click();
+    resetStats();
+    await goToScreen(currentScreen - 1, true);
+  }
+}
+
+function resetStats() {
+  // Screen 1
+  ['s1-rps','s1-rt'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'stat-card';
+    const v = document.getElementById(id+'-val');
+    const n = document.getElementById(id+'-note');
+    if (v) v.textContent = '—';
+    if (n) n.textContent = '';
+  });
+  setNode('s1n-client', '#f5f7fa', '#dde1ea');
+  setNode('s1n-dns',    '#f5f7fa', '#dde1ea');
+  setNode('s1n-srv',    '#f5f7fa', '#dde1ea');
+  const p1 = document.getElementById('s1-pkt');
+  if (p1) p1.setAttribute('opacity','0');
+
+  // Screen 2
+  ['s2-conn','s2-rt','s2-cpu','s2-spof'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'stat-card';
+    const v = document.getElementById(id+'-val');
+    const n = document.getElementById(id+'-note');
+    if (v) v.textContent = '—';
+    if (n) n.textContent = '';
+  });
+  setNode('s2n-srv', '#f5f7fa', '#dde1ea');
+  const ico = document.getElementById('s2n-srv-ico');
+  if (ico) ico.textContent = '🖥';
+  const sub = document.getElementById('s2n-srv-sub');
+  if (sub) { sub.textContent = 'capacity: ~10k connections'; sub.style.fill = '#9aa3b5'; }
+
+  // Screen 3
+  setNode('s3n-lb', '#f5f7fa', '#dde1ea');
+  ['s3n-a','s3n-b','s3n-c','s3n-d'].forEach(id => setNode(id, '#f5f7fa', '#dde1ea'));
+  ['s3-pkt-0','s3-pkt-1','s3-pkt-2','s3-pkt-3'].forEach(id => {
+    const p = document.getElementById(id);
+    if (p) p.setAttribute('opacity','0');
+  });
+  const s3a = document.getElementById('s3-algos');
+  if (s3a) s3a.style.display = 'none';
+  ['alg-0','alg-1','alg-2'].forEach(id => {
+    const r = document.getElementById(id);
+    if (r) r.className = '';
+  });
+  const s3s = document.getElementById('s3-stats');
+  if (s3s) s3s.style.display = 'none';
+  ['s3-rps','s3-fo'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'stat-card';
+    const v = document.getElementById(id+'-val');
+    const n = document.getElementById(id+'-note');
+    if (v) v.textContent = '—';
+    if (n) n.textContent = '';
+  });
+
+  // Screen 4
+  for (let i = 0; i <= 3; i++) {
+    const t = document.getElementById('tier-'+i);
+    if (t) t.className = 'tier-node';
+  }
+  for (let i = 0; i <= 2; i++) {
+    const a = document.getElementById('tarr-'+i);
+    if (a) a.className = 'tier-arrow';
+  }
+  const s4r = document.getElementById('s4-route');
+  if (s4r) s4r.style.display = 'none';
+  const s4t = document.getElementById('s4-table');
+  if (s4t) s4t.style.display = 'none';
+  ['ttr-0','ttr-1','ttr-2','ttr-3'].forEach(id => {
+    const r = document.getElementById(id);
+    if (r) r.className = '';
+  });
+  const s4v = document.getElementById('s4-verdict');
+  if (s4v) s4v.style.display = 'none';
+
+  // Screen 5
+  const spBad  = document.getElementById('sp-bad');
+  const spGood = document.getElementById('sp-good');
+  if (spBad)  spBad.classList.remove('show');
+  if (spGood) spGood.classList.remove('show');
+  const s5t = document.getElementById('s5-table');
+  if (s5t) s5t.style.display = 'none';
+  ['str-0','str-1','str-2','str-3'].forEach(id => {
+    const r = document.getElementById(id);
+    if (r) r.className = '';
+  });
+  const s5v = document.getElementById('s5-verdict');
+  if (s5v) s5v.style.display = 'none';
+}
+
+function restart() {
+  _cancelToken++;
+  window.speechSynthesis.cancel();
+  _pausedText = '';
+  busy = false;
+  paused = false;
+  showPauseBtn(false);
+  sfx.click();
+  resetStats();
+
+  document.querySelectorAll('.intro-card').forEach(c => c.classList.remove('animating'));
+  const insp = document.querySelector('.intro-inspiration');
+  if (insp) insp.classList.remove('animating');
+
+  showScreen(0);
+  updateHeader(0);
+  document.getElementById('btn-prev').disabled = true;
+  document.getElementById('btn-next').style.display = 'flex';
+}
+
+async function runAuto() {
+  if (busy) return;
+  sfx.click();
+  resetStats();
+  await goToScreen(0);
+  await delay(1800);
+  await beginModule();
+  await delay(1800);
+  for (let i = 2; i < TOTAL; i++) {
+    await goToScreen(i);
+    await delay(1800);
+  }
+}
+
+// Init voices
+if (window.speechSynthesis) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+}
+
+showScreen(0);
+</script>
+</body>
+</html>
