@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 11 — Security, Abuse &amp; Rate Limiting | Engineering Refresh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #f0f2f5;
+    --surface:   #ffffff;
+    --surface2:  #f5f7fa;
+    --border:    #dde1ea;
+    --border2:   #c4cad8;
+    --text:      #1a1f2e;
+    --muted:     #5a6478;
+    --faint:     #9aa3b5;
+    --blue:      #1a7fe8;
+    --blue-bg:   #e8f2fd;
+    --green:     #18a864;
+    --green-bg:  #e6f7f0;
+    --red:       #e03e3e;
+    --red-bg:    #fdeaea;
+    --amber:     #d97b10;
+    --amber-bg:  #fef3e2;
+    --purple:    #7c3aed;
+    --purple-bg: #f3f0ff;
+    --font-ui:   'DM Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: none;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 700px;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  .header {
+    padding: 18px 24px 16px;
+    border-bottom: none;
+    display: flex; align-items: flex-start;
+    justify-content: space-between; gap: 12px;
+  }
+  .header-left { flex: 1; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--blue); background: var(--blue-bg);
+    border: 1px solid rgba(26,127,232,.25); border-radius: 6px;
+    padding: 3px 9px; margin-bottom: 8px;
+  }
+  .header h1 { font-size: 19px; font-weight: 600; margin-bottom: 3px; }
+  .header p  { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+  .module-num {
+    font-family: var(--font-mono); font-size: 11px; color: var(--faint);
+    background: var(--surface2); border: none;
+    border-radius: 8px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  /* ── Audio toggle ── */
+  .audio-ctrl {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface2); border: none;
+    border-radius: 8px; padding: 5px 10px; cursor: pointer;
+    font-size: 11px; color: var(--muted); transition: all .35s ease;
+    user-select: none;
+  }
+  .audio-ctrl:hover { border-color: var(--border2); background: #edf0f5; }
+  .audio-ctrl.on { background: var(--blue-bg); border-color: rgba(26,127,232,.4); color: var(--blue); }
+  .audio-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); transition: background .2s; }
+  .audio-ctrl.on .audio-dot { background: var(--blue); animation: pulse 2.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.3);opacity:.6} }
+
+  /* ── Step progress bar ── */
+  .progress-bar { display: flex; gap: 0; border-bottom: none; }
+  .prog-step {
+    flex: 1; padding: 8px 0; text-align: center;
+    font-family: var(--font-mono); font-size: 9px;
+    color: var(--faint); background: var(--surface2);
+    border-right: none;
+    transition: all .7s cubic-bezier(0.4,0,0.2,1); cursor: default;
+  }
+  .prog-step:last-child { border-right: none; }
+  .prog-step.active { background: var(--blue-bg); color: var(--blue); font-weight: 500; }
+  .prog-step.done   { background: var(--green-bg); color: var(--green); }
+  .prog-step.warn   { background: var(--red-bg);   color: var(--red); }
+
+  .screen-wrap { min-height: 340px; position: relative; }
+
+  .screen { display: none; padding: 20px 24px; animation: fadeIn .9s cubic-bezier(0.22,0.61,0.36,1); }
+  .screen.active { display: block; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ── Narrator bubble ── */
+  .narrator {
+    padding: 10px 14px; margin-bottom: 16px;
+    background: var(--blue-bg); border: none;
+    border-radius: 10px; font-size: 12px; color: var(--blue); line-height: 1.6;
+    display: none; align-items: flex-start; gap: 8px;
+  }
+  .narrator.visible { display: flex; }
+  .narrator-icon { font-size: 15px; flex-shrink: 0; }
+  .speaking-dots span {
+    display: inline-block; width: 4px; height: 4px; border-radius: 50%;
+    background: var(--blue); margin: 0 1px; vertical-align: middle;
+    animation: bounce 1.8s ease-in-out infinite;
+  }
+  .speaking-dots span:nth-child(2) { animation-delay: .2s; }
+  .speaking-dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+
+  .screen-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+  .screen-sub   { font-size: 12px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+
+  /* ── Table / node cards ── */
+  .tables-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .db-table {
+    flex: 1; min-width: 140px;
+    background: var(--surface2); border: none;
+    border-radius: 10px; overflow: hidden;
+    transition: border-color .7s cubic-bezier(0.4,0,0.2,1), box-shadow .7s cubic-bezier(0.4,0,0.2,1), transform .7s cubic-bezier(0.4,0,0.2,1);
+  }
+  .db-table.highlight { border-color: var(--blue);  box-shadow: 0 0 0 3px rgba(26,127,232,.1); transform: translateY(-2px); }
+  .db-table.error     { border-color: var(--red);   box-shadow: 0 0 0 3px rgba(224,62,62,.1); }
+  .db-table.warn      { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(217,123,16,.1); }
+  .db-table.success   { border-color: var(--green);  box-shadow: 0 0 0 3px rgba(24,168,100,.1); transform: translateY(-2px); }
+  .table-header {
+    padding: 7px 12px; font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+    background: var(--border); color: var(--text);
+    display: flex; align-items: center; gap: 6px;
+    transition: background .7s cubic-bezier(0.4,0,0.2,1), color .7s cubic-bezier(0.4,0,0.2,1);
+  }
+  .db-table.highlight .table-header { background: var(--blue-bg);  color: var(--blue); }
+  .db-table.error     .table-header { background: var(--red-bg);   color: var(--red); }
+  .db-table.warn      .table-header { background: var(--amber-bg); color: var(--amber); }
+  .db-table.success   .table-header { background: var(--green-bg); color: var(--green); }
+  .table-field {
+    padding: 4px 12px; font-family: var(--font-mono); font-size: 10px;
+    color: var(--muted); border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between;
+  }
+  .field-pk { color: var(--amber); font-size: 9px; font-weight: 500; }
+  .field-fk { color: var(--blue);  font-size: 9px; font-weight: 500; }
+  .field-type { color: var(--faint); font-size: 9px; }
+
+  /* ── Code / query box ── */
+  .query-box {
+    background: #1a1f2e; border-radius: 10px; padding: 12px 16px; border: none;
+    font-family: var(--font-mono); font-size: 11px; line-height: 1.8;
+    color: #c9d1d9; overflow-x: auto; margin-bottom: 4px;
+  }
+  .sql-kw  { color: #ff7b72; }
+  .sql-fn  { color: #79c0ff; }
+  .sql-cmt { color: #6e7681; }
+  .sql-num { color: #f2cc60; }
+  .sql-str { color: #a5d6ff; }
+
+  /* ── Stat callouts ── */
+  .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat-card {
+    background: var(--surface2); border: none;
+    border-radius: 10px; padding: 12px 14px;
+    transition: border-color .7s cubic-bezier(0.4,0,0.2,1), background .7s cubic-bezier(0.4,0,0.2,1);
+  }
+  .stat-card.good { border-color: var(--green); background: var(--green-bg); }
+  .stat-card.bad  { border-color: var(--red);   background: var(--red-bg); }
+  .stat-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+  .stat-card.good .stat-label { color: var(--green); }
+  .stat-card.bad  .stat-label { color: var(--red); }
+  .stat-val   { font-size: 22px; font-weight: 600; font-family: var(--font-mono); color: var(--text); }
+  .stat-card.good .stat-val { color: var(--green); }
+  .stat-card.bad  .stat-val { color: var(--red); }
+  .stat-unit  { font-size: 11px; color: var(--muted); }
+  .stat-note  { font-size: 10px; color: var(--faint); margin-top: 4px; }
+  .stat-card.good .stat-note { color: var(--green); opacity: .8; }
+  .stat-card.bad  .stat-note { color: var(--red);   opacity: .8; }
+
+  /* ── Verdict banner ── */
+  .verdict {
+    border-radius: 10px; padding: 14px 16px;
+    display: flex; align-items: flex-start; gap: 12px;
+    font-size: 13px; line-height: 1.5;
+  }
+  .verdict.success { background: var(--green-bg); border: none; color: var(--green); }
+  .verdict.fail    { background: var(--red-bg);   border: 1px solid rgba(224,62,62,.3);  color: var(--red); }
+  .verdict-icon { font-size: 20px; flex-shrink: 0; }
+  .verdict-title { font-weight: 600; font-size: 14px; margin-bottom: 3px; }
+  .verdict-body  { font-size: 12px; opacity: .85; }
+
+  .diagram-svg { display: block; width: 100%; }
+
+  /* ── Footer nav ── */
+  .footer {
+    padding: 14px 24px; border-top: none;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  }
+  .footer-left  { display: flex; gap: 8px; flex-wrap: wrap; }
+  .footer-right { display: flex; gap: 8px; }
+
+  .btn {
+    font-family: var(--font-ui); font-size: 12px; font-weight: 500;
+    padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    border: none; background: var(--surface2); color: var(--text);
+    transition: all .35s cubic-bezier(0.4,0,0.2,1); display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: #edf0f5; border-color: var(--border2); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+  .btn.green  { background: var(--green-bg);  border-color: rgba(24,168,100,.4);  color: var(--green); }
+  .btn.red    { background: var(--red-bg);    border-color: rgba(224,62,62,.4);   color: var(--red); }
+  .btn.blue   { background: var(--blue-bg);   border-color: rgba(26,127,232,.4);  color: var(--blue); }
+  .btn.purple { background: var(--purple-bg); border-color: rgba(124,58,237,.4);  color: var(--purple); }
+  .btn.amber  { background: var(--amber-bg);  border-color: rgba(217,123,16,.5);  color: var(--amber); }
+  .btn.ghost  { background: transparent; border-color: var(--border); color: var(--muted); }
+
+  /* ── Concepts (last screen) ── */
+  .concepts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .concept-card { background: var(--surface2); border: none; border-radius: 10px; padding: 12px; }
+  .concept-icon { font-size: 18px; margin-bottom: 6px; }
+  .concept-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+  }
+  .concept-body { font-size: 11px; color: var(--faint); line-height: 1.5; }
+
+  .divider { height: 1px; background: transparent; margin: 14px 0; }
+
+  .pill {
+    display: inline-flex; align-items: center;
+    font-family: var(--font-mono); font-size: 9px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px; vertical-align: middle; margin-left: 4px;
+  }
+  .pill.green { background: var(--green-bg); color: var(--green); }
+  .pill.red   { background: var(--red-bg);   color: var(--red); }
+  .pill.blue  { background: var(--blue-bg);  color: var(--blue); }
+  .pill.amber { background: var(--amber-bg); color: var(--amber); }
+
+  /* ── Intro screen (screen-0) — light theme ── */
+  .intro-screen { background: var(--surface); padding: 20px 24px 18px; position: relative; }
+  .intro-series-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: 9px; font-weight: 500;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--blue); background: var(--blue-bg);
+    border: none; border-radius: 20px; padding: 3px 10px; margin-bottom: 12px;
+  }
+  .intro-series-tag .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--blue); animation: pulse 1.6s ease-in-out infinite; }
+  .intro-headline { font-size: 19px; font-weight: 700; line-height: 1.25; color: var(--text); margin-bottom: 4px; letter-spacing: -.01em; }
+  .intro-headline span { color: var(--blue); }
+  .intro-subline { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
+  .intro-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .intro-card {
+    background: var(--surface2); border: none; border-radius: 10px; padding: 10px 12px;
+    transition: border-color .2s; position: relative; overflow: hidden;
+  }
+  .intro-card::after {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--card-glow, var(--blue)), transparent);
+    border-radius: 10px 10px 0 0;
+  }
+  .intro-card-icon { font-size: 18px; margin-bottom: 5px; display: block; }
+  .intro-card-title { font-size: 11.5px; font-weight: 600; color: var(--text); margin-bottom: 3px; line-height: 1.2; }
+  .intro-card-text { font-size: 10px; color: var(--muted); line-height: 1.5; }
+  .intro-inspiration {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--green-bg); border: none; border-left: 3px solid var(--green);
+    border-radius: 10px; padding: 11px 13px; margin-bottom: 12px;
+  }
+  .intro-insp-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+  .intro-insp-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 4px;
+  }
+  .intro-insp-text { font-size: 11px; color: var(--muted); line-height: 1.55; }
+
+  .narrator-dark {
+    padding: 9px 13px; margin-bottom: 12px;
+    background: var(--blue-bg); border: none;
+    border-radius: 10px; font-size: 12px; color: var(--blue); line-height: 1.5;
+    display: none; align-items: flex-start; gap: 8px;
+  }
+  .narrator-dark.visible { display: flex; }
+
+  /* ── Dynamic header transitions ── */
+  .header h1 { transition: opacity .65s cubic-bezier(0.4,0,0.2,1), transform .65s cubic-bezier(0.4,0,0.2,1); }
+  .header p  { transition: opacity .65s cubic-bezier(0.4,0,0.2,1), transform .65s cubic-bezier(0.4,0,0.2,1); }
+  .header h1.fading, .header p.fading { opacity: 0; transform: translateY(-4px); }
+  .module-num { transition: opacity .5s ease; }
+  .module-num.fading { opacity: 0; }
+
+  @keyframes cardEntry { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: translateY(0); } }
+  .intro-card.animating { opacity: 0; animation: cardEntry 1.6s cubic-bezier(0.22,0.61,0.36,1) forwards; }
+  .intro-card.animating:nth-child(1) { animation-delay: .15s; }
+  .intro-card.animating:nth-child(2) { animation-delay: .45s; }
+  .intro-card.animating:nth-child(3) { animation-delay: .75s; }
+  .intro-card.animating:nth-child(4) { animation-delay: 1.05s; }
+
+  @keyframes inspEntry { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+  .intro-inspiration.animating { opacity: 0; animation: inspEntry 1s cubic-bezier(0.22,0.61,0.36,1) 1.35s forwards; }
+
+  @keyframes slideOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(-28px); } }
+  .screen.sliding-out { display: block !important; animation: slideOut .7s cubic-bezier(0.4,0,1,1) forwards; pointer-events: none; }
+
+  @keyframes slideIn { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: translateX(0); } }
+  .screen.slide-in { animation: slideIn .8s cubic-bezier(0.22,0.61,0.36,1) forwards !important; }
+
+  #cinematic-overlay {
+    position: fixed; inset: 0; z-index: 9999; background: var(--surface);
+    opacity: 0; pointer-events: none; transition: opacity .7s cubic-bezier(0.4,0,0.2,1);
+  }
+  #cinematic-overlay.fade-in  { opacity: 1; pointer-events: all; }
+  #cinematic-overlay.fade-out { opacity: 0; pointer-events: none; }
+
+  /* ── Comparison table (algorithms) ── */
+  .compare-table {
+    width: 100%; border-collapse: collapse;
+    font-family: var(--font-mono); font-size: 10.5px;
+    margin-bottom: 12px;
+  }
+  .compare-table th {
+    padding: 7px 12px; text-align: left;
+    background: var(--surface2); color: var(--muted);
+    border: none; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; font-size: 9px;
+  }
+  .compare-table td {
+    padding: 8px 12px; border: none; color: var(--text);
+    vertical-align: top; line-height: 1.5;
+    transition: background .5s ease, color .5s ease;
+  }
+  .compare-table tr.highlight-row td { background: var(--blue-bg); color: var(--blue); }
+  .compare-table tr.good-row td { background: var(--green-bg); color: var(--green); }
+  .compare-table td:first-child { font-weight: 500; color: var(--muted); font-size: 9.5px; white-space: nowrap; }
+
+</style>
+</head>
+<body>
+<div id="cinematic-overlay"></div>
+<div class="card">
+
+  <!-- ── Header ── -->
+  <div class="header">
+    <div class="header-left">
+      <div class="tag">🔒 Engineering Refresh</div>
+      <h1 id="header-title">Security, Abuse &amp; Rate Limiting</h1>
+      <p id="header-sub">From an open login form to a fortress resisting botnets — token buckets, JWT/OAuth, and spam ML.</p>
+    </div>
+    <div class="header-right">
+      <div class="module-num" id="module-num">Chapter 11</div>
+      <div class="audio-ctrl on" id="audio-ctrl" onclick="toggleAudio()">
+        <div class="audio-dot" style="background:var(--blue);animation:pulse 1.2s ease-in-out infinite"></div>
+        <span id="audio-label">Audio on</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step progress ── -->
+  <div class="progress-bar" id="progress-bar">
+    <div class="prog-step active" id="prog-0">Purpose</div>
+    <div class="prog-step"        id="prog-1">1 · Login Flow</div>
+    <div class="prog-step"        id="prog-2">2 · Under Attack</div>
+    <div class="prog-step"        id="prog-3">3 · Rate Limit</div>
+    <div class="prog-step"        id="prog-4">4 · Auth + Spam</div>
+    <div class="prog-step"        id="prog-5">5 · Algorithms</div>
+    <div class="prog-step"        id="prog-6">6 · Summary</div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 0 — Purpose / Intro
+  ═════════════════════════════════════ -->
+  <div class="screen active" id="screen-0">
+    <div class="intro-screen">
+      <div class="narrator-dark" id="narrator"><div class="narrator-icon" style="font-size:15px;flex-shrink:0">🎙</div><div><span id="narrator-text"></span><span class="speaking-dots" id="speaking-dots" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+      <div class="intro-cards">
+        <div class="intro-card">
+          <span class="intro-card-icon">🔑</span>
+          <div class="intro-card-title">Trust Nothing by Default</div>
+          <div class="intro-card-text">Every request could be an attacker. Verify identity and intent before acting on it.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">🪣</span>
+          <div class="intro-card-title">Budget Every Request</div>
+          <div class="intro-card-text">Rate limiting turns "unlimited" into "fair" — protecting shared infrastructure from any single client.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">🤖</span>
+          <div class="intro-card-title">Detect the Bots</div>
+          <div class="intro-card-text">Spam and abuse patterns are learnable. ML pipelines classify traffic faster than any human moderator.</div>
+        </div>
+        <div class="intro-card">
+          <span class="intro-card-icon">🛡</span>
+          <div class="intro-card-title">Build for Scale</div>
+          <div class="intro-card-text">See how a login form for 30 users becomes a fortress protecting 100M+ accounts.</div>
+        </div>
+      </div>
+
+      <div class="intro-inspiration">
+        <div class="intro-insp-icon">🛡</div>
+        <div class="intro-insp-body">
+          <div class="intro-insp-title">First inspiration point</div>
+          <div class="intro-insp-text">We begin with the systems guarding every social platform: login forms, API endpoints, and comment boxes that must resist credential stuffing, botnets, and spam — without ever slowing down a real user.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 1 — Happy path: the login/post flow
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-1">
+    <div class="narrator" id="narrator-1"><div class="narrator-icon">🎙</div><div><span id="narrator-text-1"></span><span class="speaking-dots" id="speaking-dots-1" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">The Login &amp; Post Flow <span class="pill green">30 users</span></div>
+    <div class="screen-sub">A simple signed token, checked on every request. No rate limiting needed — nobody is attacking us yet.</div>
+
+    <div class="tables-row" id="tables-s1">
+      <div class="db-table" id="s1-client">
+        <div class="table-header"><span>🖥</span> Client</div>
+        <div class="table-field">Sends credentials <span class="field-type">once</span></div>
+        <div class="table-field">Stores JWT <span class="field-type">in memory</span></div>
+      </div>
+      <div class="db-table" id="s1-auth">
+        <div class="table-header"><span>🔑</span> Auth Server</div>
+        <div class="table-field">Verifies password <span class="field-type">bcrypt</span></div>
+        <div class="table-field">Issues JWT <span class="field-type">signed</span></div>
+      </div>
+      <div class="db-table" id="s1-api">
+        <div class="table-header"><span>🌐</span> API Server</div>
+        <div class="table-field">Checks signature <span class="field-type">HMAC</span></div>
+        <div class="table-field">Serves request <span class="field-type">no limit</span></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="query-box">
+<span class="sql-cmt">// decoded JWT payload</span>
+{
+  <span class="sql-fn">"sub"</span>: <span class="sql-str">"user_4471"</span>,
+  <span class="sql-fn">"role"</span>: <span class="sql-str">"member"</span>,
+  <span class="sql-fn">"iat"</span>: <span class="sql-num">1732200000</span>,
+  <span class="sql-fn">"exp"</span>: <span class="sql-num">1732203600</span>
+}
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="stats-row" id="stats-s1">
+      <div class="stat-card" id="s1-lat">
+        <div class="stat-label">Auth check latency</div>
+        <div class="stat-val" id="s1-lat-val">—</div>
+        <div class="stat-note" id="s1-lat-note"></div>
+      </div>
+      <div class="stat-card" id="s1-rps">
+        <div class="stat-label">Requests / sec</div>
+        <div class="stat-val" id="s1-rps-val">—</div>
+        <div class="stat-note" id="s1-rps-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 2 — Breaking point: attack at scale
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-2">
+    <div class="narrator" id="narrator-2"><div class="narrator-icon">🎙</div><div><span id="narrator-text-2"></span><span class="speaking-dots" id="speaking-dots-2" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Same Endpoints — 100M+ Users <span class="pill red">Under Attack</span></div>
+    <div class="screen-sub">No rate limit and no abuse detection. A leaked password list and a botnet are all it takes.</div>
+
+    <div class="query-box">
+<span class="sql-cmt">// credential stuffing — same endpoint, millions of tries</span>
+<span class="sql-kw">POST</span> /login   <span class="sql-cmt">// x 40,000 req/sec, rotating IPs</span>
+<span class="sql-kw">POST</span> /comment <span class="sql-cmt">// bot swarm, no CAPTCHA, no limit</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="stats-row" id="stats-s2">
+      <div class="stat-card" id="s2-login">
+        <div class="stat-label">Login attempts / sec</div>
+        <div class="stat-val" id="s2-login-val">—</div>
+        <div class="stat-note" id="s2-login-note"></div>
+      </div>
+      <div class="stat-card" id="s2-ato">
+        <div class="stat-label">Account takeovers / hr</div>
+        <div class="stat-val" id="s2-ato-val">—</div>
+        <div class="stat-note" id="s2-ato-note"></div>
+      </div>
+      <div class="stat-card" id="s2-spam">
+        <div class="stat-label">Spam posts / min</div>
+        <div class="stat-val" id="s2-spam-val">—</div>
+        <div class="stat-note" id="s2-spam-note"></div>
+      </div>
+      <div class="stat-card" id="s2-cost">
+        <div class="stat-label">Infra cost spike</div>
+        <div class="stat-val" id="s2-cost-val">—</div>
+        <div class="stat-note" id="s2-cost-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 3 — Solution 1: Token Bucket rate limiter
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-3">
+    <div class="narrator" id="narrator-3"><div class="narrator-icon">🎙</div><div><span id="narrator-text-3"></span><span class="speaking-dots" id="speaking-dots-3" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Fix 1 — Token Bucket Rate Limiter <span class="pill blue">Solution</span></div>
+    <div class="screen-sub">Every client gets a bucket of tokens that refills at a fixed rate. No tokens, no request.</div>
+
+    <div style="margin-bottom:14px">
+      <svg class="diagram-svg" viewBox="0 0 652 155" xmlns="http://www.w3.org/2000/svg">
+        <rect x="276" y="4"   width="100" height="34" rx="9" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="326" y="21" text-anchor="middle" font-size="14" dominant-baseline="central">🖥</text>
+        <text x="326" y="33" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="10" fill="#5a6478">Client Request</text>
+        <line x1="326" y1="38" x2="326" y2="54" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+
+        <rect id="bucket-box" x="236" y="54" width="180" height="52" rx="10" fill="#e8f2fd" stroke="#1a7fe8" stroke-width="1.5"/>
+        <text x="326" y="66" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#1a7fe8">Token Bucket (cap: 20)</text>
+        <circle id="tok-0" cx="256" cy="88" r="5" fill="#1a7fe8"/>
+        <circle id="tok-1" cx="272" cy="88" r="5" fill="#1a7fe8"/>
+        <circle id="tok-2" cx="288" cy="88" r="5" fill="#1a7fe8"/>
+        <circle id="tok-3" cx="304" cy="88" r="5" fill="#1a7fe8"/>
+        <circle id="tok-4" cx="320" cy="88" r="5" fill="#1a7fe8"/>
+        <circle id="tok-5" cx="336" cy="88" r="5" fill="#1a7fe8"/>
+        <circle id="tok-6" cx="352" cy="88" r="5" fill="#1a7fe8"/>
+        <circle id="tok-7" cx="368" cy="88" r="5" fill="#1a7fe8"/>
+        <circle id="tok-8" cx="384" cy="88" r="5" fill="#1a7fe8"/>
+        <circle id="tok-9" cx="400" cy="88" r="5" fill="#1a7fe8"/>
+        <text x="196" y="80" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#18a864">⟲ refill</text>
+        <text x="196" y="92" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#5a6478">10/sec</text>
+
+        <line x1="270" y1="106" x2="150" y2="128" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <line x1="382" y1="106" x2="500" y2="128" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+
+        <rect id="allow-box" x="50"  y="128" width="200" height="26" rx="7" fill="#e6f7f0" stroke="#18a864" stroke-width="1"/>
+        <text x="150" y="141" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#18a864" dominant-baseline="central">✓ Token available → forward</text>
+
+        <rect id="deny-box" x="400" y="128" width="200" height="26" rx="7" fill="#fdeaea" stroke="#e03e3e" stroke-width="1"/>
+        <text x="500" y="141" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#e03e3e" dominant-baseline="central">✗ Empty → 429 Too Many Requests</text>
+      </svg>
+    </div>
+
+    <div class="query-box">
+<span class="sql-cmt">// token bucket — pseudocode</span>
+<span class="sql-kw">function</span> <span class="sql-fn">allowRequest</span>(clientId) {
+  bucket = getBucket(clientId)
+  refill(bucket, ratePerSec: <span class="sql-num">10</span>, capacity: <span class="sql-num">20</span>)
+  <span class="sql-kw">if</span> (bucket.tokens &gt;= <span class="sql-num">1</span>) {
+    bucket.tokens <span class="sql-kw">-=</span> <span class="sql-num">1</span>
+    <span class="sql-kw">return</span> <span class="sql-fn">ALLOW</span>
+  }
+  <span class="sql-kw">return</span> <span class="sql-fn">REJECT</span> <span class="sql-cmt">// 429</span>
+}
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="stats-row" id="s3-stats" style="display:none">
+      <div class="stat-card" id="s3-allow">
+        <div class="stat-label">Legit requests allowed</div>
+        <div class="stat-val" id="s3-allow-val">—</div>
+        <div class="stat-note" id="s3-allow-note"></div>
+      </div>
+      <div class="stat-card" id="s3-block">
+        <div class="stat-label">Bot requests blocked</div>
+        <div class="stat-val" id="s3-block-val">—</div>
+        <div class="stat-note" id="s3-block-note"></div>
+      </div>
+      <div class="stat-card" id="s3-impact">
+        <div class="stat-label">Legit user impact</div>
+        <div class="stat-val" id="s3-impact-val">—</div>
+        <div class="stat-note" id="s3-impact-note"></div>
+      </div>
+      <div class="stat-card" id="s3-lat">
+        <div class="stat-label">Added latency</div>
+        <div class="stat-val" id="s3-lat-val">—</div>
+        <div class="stat-note" id="s3-lat-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 4 — Solution 2: JWT/OAuth + spam ML pipeline
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-4">
+    <div class="narrator" id="narrator-4"><div class="narrator-icon">🎙</div><div><span id="narrator-text-4"></span><span class="speaking-dots" id="speaking-dots-4" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Fix 2 — OAuth/JWT + Spam ML Pipeline <span class="pill blue">Solution</span></div>
+    <div class="screen-sub">Short-lived tokens limit blast radius. A classifier scores every post before it reaches a feed.</div>
+
+    <div style="margin-bottom:14px">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🔐 OAuth Token Flow</div>
+      <svg class="diagram-svg" viewBox="0 0 652 90" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10"  y="28" width="70" height="36" rx="9" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="45" y="46" text-anchor="middle" font-size="15" dominant-baseline="central">🖥</text>
+        <text x="45" y="60" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="10" fill="#5a6478">Client</text>
+        <line x1="80" y1="46" x2="108" y2="46" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <rect x="108" y="28" width="110" height="36" rx="9" fill="#f3f0ff" stroke="#7c3aed" stroke-width="1"/>
+        <text x="163" y="40" text-anchor="middle" font-size="13" dominant-baseline="central">🔑</text>
+        <text x="163" y="54" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="10" fill="#7c3aed">Auth Server</text>
+        <line x1="218" y1="46" x2="252" y2="46" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <rect id="jwt-box" x="252" y="28" width="130" height="36" rx="9" fill="#fef3e2" stroke="#d97b10" stroke-width="1"/>
+        <text x="317" y="40" text-anchor="middle" font-size="12" dominant-baseline="central">🎫</text>
+        <text x="317" y="54" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#d97b10">access+refresh JWT</text>
+        <line x1="382" y1="46" x2="416" y2="46" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <rect id="gateway-box" x="416" y="28" width="110" height="36" rx="9" fill="#e8f2fd" stroke="#1a7fe8" stroke-width="1"/>
+        <text x="471" y="40" text-anchor="middle" font-size="12" dominant-baseline="central">🔀</text>
+        <text x="471" y="54" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="10" fill="#1a7fe8">API Gateway</text>
+        <line x1="526" y1="46" x2="560" y2="46" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <rect x="560" y="28" width="82" height="36" rx="9" fill="#e6f7f0" stroke="#18a864" stroke-width="1"/>
+        <text x="601" y="40" text-anchor="middle" font-size="12" dominant-baseline="central">🗄</text>
+        <text x="601" y="54" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="10" fill="#18a864">Resource Svc</text>
+      </svg>
+    </div>
+
+    <div id="s4-micro" style="display:none;margin-bottom:14px">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🤖 Spam ML Pipeline</div>
+      <svg class="diagram-svg" viewBox="0 0 652 90" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10"  y="28" width="90" height="36" rx="9" fill="#f5f7fa" stroke="#dde1ea" stroke-width="1"/>
+        <text x="55" y="40" text-anchor="middle" font-size="13" dominant-baseline="central">📝</text>
+        <text x="55" y="54" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="10" fill="#5a6478">New Post</text>
+        <line x1="100" y1="46" x2="134" y2="46" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <rect x="134" y="28" width="120" height="36" rx="9" fill="#f3f0ff" stroke="#7c3aed" stroke-width="1"/>
+        <text x="194" y="40" text-anchor="middle" font-size="12" dominant-baseline="central">🧬</text>
+        <text x="194" y="54" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="10" fill="#7c3aed">Feature Extract</text>
+        <line x1="254" y1="46" x2="288" y2="46" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <rect id="classifier-box" x="288" y="28" width="120" height="36" rx="9" fill="#e8f2fd" stroke="#1a7fe8" stroke-width="1"/>
+        <text x="348" y="40" text-anchor="middle" font-size="12" dominant-baseline="central">🤖</text>
+        <text x="348" y="54" text-anchor="middle" font-family="'DM Sans',sans-serif" font-size="10" fill="#1a7fe8">ML Classifier</text>
+        <line x1="408" y1="38" x2="440" y2="20" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <line x1="408" y1="46" x2="440" y2="46" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <line x1="408" y1="54" x2="440" y2="72" stroke="#dde1ea" stroke-width="1" stroke-dasharray="3 2"/>
+        <rect x="440" y="4"  width="192" height="24" rx="7" fill="#e6f7f0" stroke="#18a864" stroke-width="1"/>
+        <text x="536" y="16" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#18a864" dominant-baseline="central">✓ Allow → feed</text>
+        <rect x="440" y="34" width="192" height="24" rx="7" fill="#fef3e2" stroke="#d97b10" stroke-width="1"/>
+        <text x="536" y="46" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#d97b10" dominant-baseline="central">⚠ Flag → human review</text>
+        <rect x="440" y="64" width="192" height="24" rx="7" fill="#fdeaea" stroke="#e03e3e" stroke-width="1"/>
+        <text x="536" y="76" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#e03e3e" dominant-baseline="central">✗ Block → never posted</text>
+      </svg>
+    </div>
+
+    <div class="stats-row" id="s4-stats" style="display:none">
+      <div class="stat-card" id="s4-verify">
+        <div class="stat-label">JWT verify time</div>
+        <div class="stat-val" id="s4-verify-val">—</div>
+        <div class="stat-note" id="s4-verify-note"></div>
+      </div>
+      <div class="stat-card" id="s4-refresh">
+        <div class="stat-label">Stolen token blast radius</div>
+        <div class="stat-val" id="s4-refresh-val">—</div>
+        <div class="stat-note" id="s4-refresh-note"></div>
+      </div>
+      <div class="stat-card" id="s4-spamrate">
+        <div class="stat-label">Posts classified / sec</div>
+        <div class="stat-val" id="s4-spamrate-val">—</div>
+        <div class="stat-note" id="s4-spamrate-note"></div>
+      </div>
+      <div class="stat-card" id="s4-fp">
+        <div class="stat-label">False positive rate</div>
+        <div class="stat-val" id="s4-fp-val">—</div>
+        <div class="stat-note" id="s4-fp-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 5 — Deep dive: rate limiting algorithms
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-5">
+    <div class="narrator" id="narrator-5"><div class="narrator-icon">🎙</div><div><span id="narrator-text-5"></span><span class="speaking-dots" id="speaking-dots-5" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Rate Limiting Algorithms <span class="pill amber">Deep Dive</span></div>
+    <div class="screen-sub">Token bucket isn't the only option. Every engineer should know these four trade-offs.</div>
+
+    <div id="s5-table" style="display:none">
+      <table class="compare-table" id="atable">
+        <thead>
+          <tr><th>Algorithm</th><th>How it works</th><th>Burst handling</th><th>Trade-off</th></tr>
+        </thead>
+        <tbody>
+          <tr id="atr-fw">
+            <td>Fixed Window</td>
+            <td>Count resets every N seconds</td>
+            <td>Poor — edge bursts</td>
+            <td>Simple, but 2x traffic at window boundary</td>
+          </tr>
+          <tr id="atr-sw">
+            <td>Sliding Window</td>
+            <td>Weighted count across overlapping windows</td>
+            <td>Good</td>
+            <td>Smoother, more memory per client</td>
+          </tr>
+          <tr id="atr-tb">
+            <td>Token Bucket</td>
+            <td>Tokens refill at fixed rate, consumed per request</td>
+            <td>Allows short bursts up to capacity</td>
+            <td>Our choice — simple, burst-friendly, low memory</td>
+          </tr>
+          <tr id="atr-lb">
+            <td>Leaky Bucket</td>
+            <td>Requests queue, processed at constant rate</td>
+            <td>None — smooths everything</td>
+            <td>Predictable output, adds queueing latency</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="verdict success" id="s5-verdict" style="display:none">
+      <div class="verdict-icon">🪣</div>
+      <div>
+        <div class="verdict-title">Why token bucket wins for APIs</div>
+        <div class="verdict-body">It tolerates natural bursts (a user opening five tabs at once) while still capping sustained abuse — the best fit when fairness matters more than perfectly smooth throughput.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCREEN 6 — Summary
+  ═════════════════════════════════════ -->
+  <div class="screen" id="screen-6">
+    <div class="narrator" id="narrator-6"><div class="narrator-icon">🎙</div><div><span id="narrator-text-6"></span><span class="speaking-dots" id="speaking-dots-6" style="display:none"><span></span><span></span><span></span></span></div></div>
+
+    <div class="screen-title">Key Takeaways</div>
+    <div class="screen-sub">What every engineer must know about security, abuse, and rate limiting.</div>
+
+    <div class="concepts-grid">
+      <div class="concept-card">
+        <div class="concept-icon">🪣</div>
+        <div class="concept-title">Token Bucket</div>
+        <div class="concept-body">Refill tokens at a fixed rate, consume one per request. Bursts are absorbed; sustained abuse is capped. Applied per-user, per-IP, or per-endpoint.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">🔑</div>
+        <div class="concept-title">JWT &amp; OAuth</div>
+        <div class="concept-body">Short-lived signed access tokens plus a longer-lived refresh token. A stolen access token expires fast; the refresh flow can be revoked.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">🧱</div>
+        <div class="concept-title">Layered Limits</div>
+        <div class="concept-body">Rate limit at the IP layer, the account layer, and the endpoint layer separately — one bad actor shouldn't be able to starve everyone else.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-icon">🤖</div>
+        <div class="concept-title">Spam ML Pipeline</div>
+        <div class="concept-body">Feature extraction + classifier score every post in milliseconds. Low-confidence cases route to human review instead of an outright block.</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="verdict success">
+      <div class="verdict-icon">💡</div>
+      <div>
+        <div class="verdict-title">The rule of thumb</div>
+        <div class="verdict-body">Authentication proves who someone is. Rate limiting bounds what they can do. Abuse detection catches what slips through both. You need all three — none of them alone is enough at scale.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Footer nav ── -->
+  <div class="footer">
+    <div class="footer-left">
+      <button class="btn ghost" id="btn-prev" onclick="prevScreen()" disabled>← Back</button>
+      <button class="btn blue"  id="btn-next" onclick="nextScreen()">Next →</button>
+    </div>
+    <div class="footer-right">
+      <button class="btn amber" id="btn-auto" onclick="runAuto()">▶ Auto demo</button>
+      <button class="btn ghost" id="btn-pause" onclick="togglePause()" style="display:none">⏸ Pause</button>
+      <button class="btn ghost" id="btn-restart" onclick="restart()">↺ Restart</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════
+// AUDIO ENGINE
+// ═══════════════════════════
+let audioEnabled = true;
+let audioCtx = null;
+
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function toggleAudio() {
+  audioEnabled = !audioEnabled;
+  const ctrl  = document.getElementById('audio-ctrl');
+  const label = document.getElementById('audio-label');
+  ctrl.className  = 'audio-ctrl' + (audioEnabled ? ' on' : '');
+  label.textContent = audioEnabled ? 'Audio on' : 'Audio off';
+  if (!audioEnabled) { window.speechSynthesis.cancel(); }
+  else {
+    try { getCtx().resume(); } catch(e) {}
+    speak("Audio enabled.", 0, null);
+  }
+}
+
+let _cancelToken  = 0;
+let _charOffset   = 0;
+let _pausedText   = '';
+let _pausedIdx    = 0;
+let _pausedOnEnd  = null;
+
+function _getVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  return voices.find(v => v.lang.startsWith('en') && (
+    v.name.includes('Google') || v.name.includes('Samantha') ||
+    v.name.includes('Daniel') || v.name.includes('Alex')
+  )) || voices.find(v => v.lang.startsWith('en'));
+}
+
+function _showNarrator(screenIdx, text) {
+  const ntxt    = document.getElementById('narrator-text'  + (screenIdx > 0 ? '-'+screenIdx : ''));
+  const ndots   = document.getElementById('speaking-dots'  + (screenIdx > 0 ? '-'+screenIdx : ''));
+  const nbubble = document.getElementById('narrator'       + (screenIdx > 0 ? '-'+screenIdx : ''));
+  if (ntxt)    ntxt.textContent = text;
+  if (ndots)   ndots.style.display = 'inline';
+  if (nbubble) nbubble.classList.add('visible');
+}
+
+function _hideNarrator(screenIdx) {
+  const ndots   = document.getElementById('speaking-dots' + (screenIdx > 0 ? '-'+screenIdx : ''));
+  const nbubble = document.getElementById('narrator'      + (screenIdx > 0 ? '-'+screenIdx : ''));
+  if (ndots)   ndots.style.display = 'none';
+  if (nbubble) nbubble.classList.remove('visible');
+}
+
+function _doSpeak(text, startChar, screenIdx, onEnd, token) {
+  window.speechSynthesis.cancel();
+  const remaining = text.slice(startChar);
+  if (!remaining.trim()) { if (onEnd) onEnd(); return; }
+  _showNarrator(screenIdx, text);
+  const utter = new SpeechSynthesisUtterance(remaining);
+  utter.rate  = 0.95;
+  utter.pitch = 1.0;
+  const v = _getVoice();
+  if (v) utter.voice = v;
+  utter.onboundary = (e) => {
+    if (_cancelToken !== token) return;
+    if (e.name === 'word') _charOffset = startChar + (e.charIndex || 0);
+  };
+  utter.onend = () => {
+    if (_cancelToken !== token) return;
+    _hideNarrator(screenIdx);
+    _pausedText  = '';
+    _charOffset  = 0;
+    _pausedOnEnd = null;
+    if (onEnd) onEnd();
+  };
+  utter.onerror = (e) => {
+    if (_cancelToken !== token) return;
+    if (e.error === 'interrupted' || e.error === 'canceled') return;
+    _hideNarrator(screenIdx);
+    if (onEnd) onEnd();
+  };
+  window.speechSynthesis.speak(utter);
+}
+
+function speak(text, screenIdx, onEnd) {
+  if (!audioEnabled) { if (onEnd) onEnd(); return; }
+  _cancelToken++;
+  const myToken = _cancelToken;
+  _charOffset  = 0;
+  _pausedText  = text;
+  _pausedIdx   = screenIdx;
+  _pausedOnEnd = onEnd;
+  _doSpeak(text, 0, screenIdx, onEnd, myToken);
+}
+
+function speakWait(text, screenIdx) {
+  return new Promise(resolve => speak(text, screenIdx, resolve));
+}
+
+function tone(freq, type, dur, vol=0.12) {
+  if (!audioEnabled) return;
+  try {
+    const ctx = getCtx(), osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.connect(g); g.connect(ctx.destination);
+    osc.type = type; osc.frequency.value = freq;
+    g.gain.setValueAtTime(vol, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.start(); osc.stop(ctx.currentTime + dur);
+  } catch(e) {}
+}
+const sfx = {
+  click:   () => tone(700, 'sine', 0.07, 0.08),
+  data:    () => tone(1100, 'square', 0.04, 0.05),
+  success: () => [523,659,784,1047].forEach((f,i) => setTimeout(() => tone(f,'sine',.18,.11), i*80)),
+  warn:    () => [440,370,311].forEach((f,i) => setTimeout(() => tone(f,'sawtooth',.15,.10), i*100)),
+  error:   () => [190,160].forEach((f,i) => setTimeout(() => tone(f,'sawtooth',.25,.14), i*120)),
+  pop:     () => tone(900, 'sine', 0.06, 0.09),
+  chord:   () => [261,329,392,523].forEach((f,i) => setTimeout(() => tone(f,'sine',.28,.09), i*55)),
+};
+
+// ═══════════════════════════
+// SCREEN ENGINE
+// ═══════════════════════════
+let currentScreen = 0;
+const TOTAL = 7;
+let busy = false;
+
+function delay(ms) {
+  return new Promise(resolve => {
+    const start = Date.now();
+    function tick() {
+      if (paused) { setTimeout(tick, 100); return; }
+      const elapsed = Date.now() - start;
+      if (elapsed >= ms) resolve();
+      else setTimeout(tick, Math.min(100, ms - elapsed));
+    }
+    tick();
+  });
+}
+
+function updateHeader(idx) {
+  const h1  = document.getElementById('header-title');
+  const sub = document.getElementById('header-sub');
+  const mod = document.getElementById('module-num');
+  if (!h1 || !sub || !mod) return;
+
+  const isIntro = idx === 0;
+  const title    = isIntro
+    ? 'Guarding the System <span style="color:var(--blue)">for AI-Assisted Development</span>'
+    : 'Security, Abuse &amp; Rate Limiting';
+  const subtitle = isIntro
+    ? 'Learn how real systems defend themselves — and how to work smarter with AI.'
+    : 'From an open login form to a fortress resisting botnets — and what breaks in between.';
+  const modLabel = 'Chapter 11';
+
+  if (h1.dataset.screen === String(idx)) return;
+  h1.dataset.screen = String(idx);
+
+  h1.classList.add('fading');
+  sub.classList.add('fading');
+  mod.classList.add('fading');
+
+  setTimeout(() => {
+    h1.innerHTML     = title;
+    sub.textContent  = subtitle;
+    mod.textContent  = modLabel;
+    h1.classList.remove('fading');
+    sub.classList.remove('fading');
+    mod.classList.remove('fading');
+  }, 550);
+}
+
+function showScreen(idx) {
+  document.querySelectorAll('.screen').forEach((s, i) => {
+    s.classList.toggle('active', i === idx);
+  });
+  for(let i=0;i<TOTAL;i++){
+    const p = document.getElementById('prog-'+i);
+    p.className = 'prog-step' + (i < idx ? ' done' : i===idx ? ' active' : '');
+  }
+  if(idx > 4) {
+    const p4 = document.getElementById('prog-4');
+    if(p4) p4.className = 'prog-step warn done';
+  }
+  currentScreen = idx;
+  updateHeader(idx);
+  document.getElementById('btn-prev').disabled = idx === 0;
+  document.getElementById('btn-next').disabled = idx === TOTAL - 1;
+  document.getElementById('btn-next').style.display = idx === TOTAL-1 ? 'none' : 'flex';
+}
+
+// ── Animate screen 0: intro ──
+async function animateScreen0() {
+  document.querySelectorAll('.intro-card').forEach(c => c.classList.remove('animating'));
+  const inspEl = document.querySelector('.intro-inspiration');
+  if (inspEl) inspEl.classList.remove('animating');
+
+  await speakWait("Welcome to Engineering Refresh. This series sharpens the engineering thinking behind every AI-assisted decision.", 0);
+  await delay(600);
+
+  const cards = document.querySelectorAll('.intro-card');
+  for (let i = 0; i < cards.length; i++) {
+    sfx.data();
+    cards[i].classList.add('animating');
+    await delay(1400);
+  }
+
+  await delay(400);
+  if (inspEl) inspEl.classList.add('animating');
+  sfx.pop();
+  await delay(800);
+
+  await speakWait("We begin with the systems guarding every social platform — login forms, API endpoints, and comment boxes under constant attack.", 0);
+  await delay(400);
+}
+
+// ── Cinematic bridge narration: intro → login flow ──
+async function animateScreen1Intro() {
+  await speakWait("Let's start with Security, Abuse, and Rate Limiting.", 1);
+  await delay(800);
+  await speakWait("The central concept here is that every request must prove who it is, and every client gets a fair budget of how much it can do.", 1);
+  await delay(800);
+  await speakWait("We will start with a small trusted user base — and then watch what happens when a botnet arrives.", 1);
+  await delay(1000);
+}
+
+async function beginModule() {
+  if (busy) return;
+  busy = true;
+  paused = false;
+  sfx.click();
+  showPauseBtn(true);
+
+  const introScreen = document.getElementById('screen-0');
+  const nextScreenEl = document.getElementById('screen-1');
+  const overlay = document.getElementById('cinematic-overlay');
+
+  introScreen.classList.add('sliding-out');
+  await delay(680);
+
+  introScreen.classList.remove('sliding-out');
+  introScreen.classList.remove('active');
+  overlay.classList.add('fade-in');
+  await delay(700);
+
+  nextScreenEl.classList.add('active');
+  currentScreen = 1;
+  updateHeader(1);
+  document.getElementById('btn-prev').disabled = false;
+  document.getElementById('prog-0').className = 'prog-step done';
+  document.getElementById('prog-1').className = 'prog-step active';
+
+  overlay.classList.remove('fade-in');
+  overlay.classList.add('fade-out');
+  nextScreenEl.classList.add('slide-in');
+  await delay(800);
+  nextScreenEl.classList.remove('slide-in');
+  overlay.classList.remove('fade-out');
+
+  window.speechSynthesis.cancel();
+  await animateScreen1Intro();
+
+  await animateScreen1();
+  showPauseBtn(false);
+  busy = false;
+}
+
+// ── Animate screen 1: nodes light up + stats ──
+async function animateScreen1() {
+  await speakWait("With 30 trusted users, the flow is simple. A client logs in, the auth server issues a signed JWT, and the API server checks that signature on every request.", 1);
+  sfx.data();
+  document.getElementById('s1-client').className = 'db-table highlight';
+  await delay(1000);
+  sfx.data();
+  document.getElementById('s1-auth').className = 'db-table highlight';
+  await delay(1000);
+  sfx.data();
+  document.getElementById('s1-api').className = 'db-table highlight';
+  await delay(1000);
+
+  await speakWait("No rate limiting, no abuse detection. At this scale, nobody is attacking us, so the overhead just isn't worth it yet.", 1);
+  await delay(700);
+
+  sfx.data();
+  document.getElementById('s1-lat').className = 'stat-card good';
+  document.getElementById('s1-lat-val').textContent = '4 ms';
+  document.getElementById('s1-lat-note').textContent = '✓ Signature check only';
+  await delay(1000);
+
+  sfx.data();
+  document.getElementById('s1-rps').className = 'stat-card good';
+  document.getElementById('s1-rps-val').textContent = '12 req/s';
+  document.getElementById('s1-rps-note').textContent = '✓ Trivial load, single server';
+  await delay(900);
+
+  sfx.success();
+}
+
+// ── Animate screen 2: attack ──
+async function animateScreen2() {
+  await speakWait("Now scale to 100 million users. Same endpoints, same code — but now attackers have a leaked password list and a botnet of rotating IPs.", 2);
+  sfx.warn();
+  await delay(1000);
+
+  const cards = [
+    { id:'s2-login', val:'40,000+/s', note:'✗ Credential stuffing, rotating IPs' },
+    { id:'s2-ato',   val:'1,200+',    note:'✗ Accounts taken over per hour' },
+    { id:'s2-spam',  val:'8,500+',    note:'✗ Bot-generated spam posts' },
+    { id:'s2-cost',  val:'6.4×',      note:'✗ Compute burned on junk traffic' },
+  ];
+
+  for (const c of cards) {
+    sfx.error();
+    const el = document.getElementById(c.id);
+    el.className = 'stat-card bad';
+    document.getElementById(c.id+'-val').textContent  = c.val;
+    document.getElementById(c.id+'-note').textContent = c.note;
+    await delay(950);
+  }
+
+  await speakWait("No rate limit, no anomaly detection. Every request is trusted equally — which means the system has no way to say 'that's enough' to a bad actor.", 2);
+}
+
+// ── Animate screen 3: token bucket ──
+async function animateScreen3() {
+  await speakWait("The fix is a token bucket rate limiter. Each client gets a bucket of tokens that refills at a steady rate. Every request costs one token.", 3);
+  await delay(900);
+
+  const toks = ['tok-0','tok-1','tok-2','tok-3','tok-4','tok-5','tok-6','tok-7','tok-8','tok-9'];
+  for (let i = toks.length - 1; i >= 0; i -= 3) {
+    sfx.data();
+    for (let j = i; j > i - 3 && j >= 0; j--) {
+      document.getElementById(toks[j]).style.opacity = '0.15';
+    }
+    await delay(400);
+  }
+  await delay(400);
+
+  document.getElementById('deny-box').style.filter = 'drop-shadow(0 0 4px rgba(224,62,62,.5))';
+  sfx.error();
+  await speakWait("Once the bucket is empty, the next request gets rejected with a 429 — Too Many Requests. The client simply waits for tokens to refill.", 3);
+  await delay(800);
+
+  toks.forEach(id => { document.getElementById(id).style.opacity = '1'; });
+  document.getElementById('allow-box').style.filter = 'drop-shadow(0 0 4px rgba(24,168,100,.5))';
+  sfx.chord();
+  await delay(700);
+
+  document.getElementById('s3-stats').style.display = 'grid';
+  const s3cards = [
+    { id:'s3-allow',  val:'99.98%',  note:'✓ Normal users barely notice' },
+    { id:'s3-block',  val:'96%+',    note:'✓ Credential stuffing traffic rejected' },
+    { id:'s3-impact', val:'~0%',     note:'✓ Bursts within capacity pass through' },
+    { id:'s3-lat',    val:'<1 ms',   note:'✓ In-memory counter check' },
+  ];
+  for (const c of s3cards) {
+    sfx.data();
+    const el = document.getElementById(c.id);
+    el.className = 'stat-card good';
+    document.getElementById(c.id + '-val').textContent  = c.val;
+    document.getElementById(c.id + '-note').textContent = c.note;
+    await delay(950);
+  }
+  await delay(300);
+  sfx.success();
+  await speakWait("Applied per-IP, per-account, and per-endpoint, a token bucket turns an unlimited attack surface into a bounded, predictable one.", 3);
+}
+
+// ── Animate screen 4: OAuth/JWT + spam ML ──
+async function animateScreen4() {
+  await speakWait("The second fix is short-lived tokens. Instead of one long-lived session, the client gets a short access token and a longer refresh token.", 4);
+  sfx.data();
+  document.getElementById('jwt-box').style.filter = 'drop-shadow(0 0 4px rgba(217,123,16,.5))';
+  await delay(1100);
+  sfx.data();
+  document.getElementById('gateway-box').style.filter = 'drop-shadow(0 0 4px rgba(26,127,232,.5))';
+  await delay(1000);
+
+  await speakWait("If an access token leaks, it expires in minutes. The refresh token can be revoked instantly, which shrinks the blast radius of any single leak.", 4);
+  await delay(900);
+
+  document.getElementById('s4-micro').style.display = 'block';
+  document.getElementById('s4-micro').style.animation = 'fadeIn .65s ease';
+  await speakWait("Alongside authentication, every new post runs through a spam pipeline: feature extraction, then a classifier that scores it as allow, flag for review, or block.", 4);
+  sfx.chord();
+  await delay(1000);
+
+  document.getElementById('s4-stats').style.display = 'grid';
+  const s4cards = [
+    { id:'s4-verify',   val:'~1 ms',  note:'✓ Signature check, no DB round-trip' },
+    { id:'s4-refresh',  val:'~15 min', note:'✓ Down from an indefinite session' },
+    { id:'s4-spamrate', val:'20k+/s',  note:'✓ Classifier scores every post inline' },
+    { id:'s4-fp',       val:'<1.5%',   note:'✓ Edge cases route to human review' },
+  ];
+  for (const c of s4cards) {
+    sfx.data();
+    const el = document.getElementById(c.id);
+    el.className = 'stat-card good';
+    document.getElementById(c.id + '-val').textContent  = c.val;
+    document.getElementById(c.id + '-note').textContent = c.note;
+    await delay(950);
+  }
+  await delay(300);
+  sfx.success();
+  await speakWait("Short-lived tokens plus a spam classifier close both doors an attacker can walk through: stolen credentials, and automated abuse of legitimate ones.", 4);
+}
+
+// ── Animate screen 5: algorithm comparison ──
+async function animateScreen5() {
+  await speakWait("Token bucket isn't the only rate limiting strategy. It's worth knowing how it compares to the alternatives.", 5);
+  await delay(900);
+
+  await speakWait("Fixed window is simplest — reset a counter every few seconds — but it allows a burst of double traffic right at the window boundary.", 5);
+  await delay(800);
+
+  await speakWait("Sliding window smooths that out by weighting counts across overlapping windows, at the cost of a bit more memory per client.", 5);
+  await delay(800);
+
+  await speakWait("Leaky bucket queues requests and drains them at a constant rate — perfectly smooth output, but it adds queueing latency.", 5);
+  await delay(800);
+
+  document.getElementById('s5-table').style.display = 'block';
+  document.getElementById('s5-table').style.animation = 'fadeIn .9s cubic-bezier(0.22,0.61,0.36,1)';
+
+  const rows = ['atr-fw','atr-sw','atr-tb','atr-lb'];
+  for (const id of rows) {
+    sfx.data();
+    document.getElementById(id).className = 'highlight-row';
+    await delay(850);
+    document.getElementById(id).className = '';
+  }
+  document.getElementById('atr-tb').className = 'good-row';
+  await delay(400);
+
+  document.getElementById('s5-verdict').style.display = 'flex';
+  document.getElementById('s5-verdict').style.animation = 'fadeIn .9s cubic-bezier(0.22,0.61,0.36,1)';
+  sfx.chord();
+  await delay(600);
+
+  await speakWait("Token bucket tends to win for public APIs because it tolerates natural bursts while still capping sustained abuse.", 5);
+}
+
+// ── Animate screen 6: summary ──
+async function animateScreen6() {
+  await speakWait("The key lesson: authentication proves who someone is. Rate limiting bounds what they can do. Abuse detection catches what slips through both. You need all three at scale.", 6);
+  sfx.success();
+}
+
+async function animateScreen1Full() {
+  await animateScreen1Intro();
+  await animateScreen1();
+}
+
+const screenAnimations = [
+  animateScreen0,
+  animateScreen1Full,
+  animateScreen2,
+  animateScreen3,
+  animateScreen4,
+  animateScreen5,
+  animateScreen6,
+];
+
+// ── Pause / Resume ──
+let paused = false;
+let pauseResolve = null;
+
+function showPauseBtn(show) {
+  const btn = document.getElementById('btn-pause');
+  if (!btn) return;
+  btn.style.display = show ? 'flex' : 'none';
+  if (!show) {
+    paused = false;
+    btn.textContent = '⏸ Pause';
+    btn.classList.remove('blue');
+    btn.classList.add('ghost');
+  }
+}
+
+function togglePause() {
+  const btn = document.getElementById('btn-pause');
+  paused = !paused;
+  if (paused) {
+    window.speechSynthesis.cancel();
+    btn.textContent = '▶ Resume';
+    btn.classList.add('blue');
+    btn.classList.remove('ghost');
+  } else {
+    btn.textContent = '⏸ Pause';
+    btn.classList.remove('blue');
+    btn.classList.add('ghost');
+    if (_pausedText) {
+      const resumeFrom = _charOffset;
+      const resumeText = _pausedText;
+      const resumeIdx  = _pausedIdx;
+      const resumeEnd  = _pausedOnEnd;
+      const myToken    = _cancelToken;
+      _doSpeak(resumeText, resumeFrom, resumeIdx, resumeEnd, myToken);
+    }
+    if (pauseResolve) { pauseResolve(); pauseResolve = null; }
+  }
+}
+
+async function goToScreen(idx, animate=true) {
+  if(busy) return;
+  busy = true;
+  _cancelToken++;
+  window.speechSynthesis.cancel();
+  _pausedText = '';
+  paused = false;
+  showScreen(idx);
+  showPauseBtn(true);
+  if(animate) await screenAnimations[idx]();
+  showPauseBtn(false);
+  busy = false;
+}
+
+async function nextScreen() {
+  if(currentScreen < TOTAL-1) {
+    _cancelToken++;
+    window.speechSynthesis.cancel();
+    _pausedText = '';
+    busy  = false;
+    paused = false;
+    showPauseBtn(false);
+    sfx.click();
+    await goToScreen(currentScreen + 1);
+  }
+}
+
+async function prevScreen() {
+  if(currentScreen > 0) {
+    _cancelToken++;
+    window.speechSynthesis.cancel();
+    _pausedText = '';
+    busy  = false;
+    paused = false;
+    showPauseBtn(false);
+    sfx.click();
+    resetStats();
+    await goToScreen(currentScreen - 1, true);
+  }
+}
+
+function restart() {
+  _cancelToken++;
+  window.speechSynthesis.cancel();
+  _pausedText = '';
+  busy  = false;
+  paused = false;
+  showPauseBtn(false);
+
+  sfx.click();
+  resetStats();
+
+  document.querySelectorAll('.intro-card').forEach(c => c.classList.remove('animating'));
+  const insp = document.querySelector('.intro-inspiration');
+  if (insp) insp.classList.remove('animating');
+
+  ['s1-client','s1-auth','s1-api'].forEach(id => {
+    document.getElementById(id).className = 'db-table';
+  });
+
+  showScreen(0);
+  updateHeader(0);
+  document.getElementById('btn-prev').disabled = true;
+  document.getElementById('btn-next').style.display = 'flex';
+}
+
+function resetStats() {
+  // screen 1
+  ['s1-lat','s1-rps'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.className = 'stat-card';
+  });
+  ['s1-lat-val','s1-rps-val'].forEach(id => document.getElementById(id).textContent = '—');
+  ['s1-lat-note','s1-rps-note'].forEach(id => document.getElementById(id).textContent = '');
+
+  // screen 2
+  ['s2-login','s2-ato','s2-spam','s2-cost'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.className = 'stat-card';
+    document.getElementById(id+'-val').textContent = '—';
+    document.getElementById(id+'-note').textContent = '';
+  });
+
+  // screen 3
+  document.getElementById('s3-stats').style.display = 'none';
+  ['s3-allow','s3-block','s3-impact','s3-lat'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.className = 'stat-card';
+    document.getElementById(id+'-val').textContent = '—';
+    document.getElementById(id+'-note').textContent = '';
+  });
+  for (let i=0;i<10;i++){ const t = document.getElementById('tok-'+i); if(t) t.style.opacity = '1'; }
+  const ab = document.getElementById('allow-box'); if(ab) ab.style.filter = 'none';
+  const db = document.getElementById('deny-box');  if(db) db.style.filter = 'none';
+
+  // screen 4
+  document.getElementById('s4-micro').style.display = 'none';
+  document.getElementById('s4-stats').style.display = 'none';
+  ['s4-verify','s4-refresh','s4-spamrate','s4-fp'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.className = 'stat-card';
+    document.getElementById(id+'-val').textContent = '—';
+    document.getElementById(id+'-note').textContent = '';
+  });
+  const jb = document.getElementById('jwt-box');     if(jb) jb.style.filter = 'none';
+  const gb = document.getElementById('gateway-box'); if(gb) gb.style.filter = 'none';
+
+  // screen 5
+  const s5t = document.getElementById('s5-table');   if(s5t) s5t.style.display = 'none';
+  const s5v = document.getElementById('s5-verdict'); if(s5v) s5v.style.display = 'none';
+  ['atr-fw','atr-sw','atr-tb','atr-lb'].forEach(id => {
+    const r = document.getElementById(id);
+    if (r) r.className = '';
+  });
+}
+
+async function runAuto() {
+  if(busy) return;
+  sfx.click();
+  resetStats();
+  ['s1-client','s1-auth','s1-api'].forEach(id => {
+    document.getElementById(id).className = 'db-table';
+  });
+  await goToScreen(0);
+  await delay(1800);
+  await beginModule();
+  await delay(1800);
+  for(let i = 2; i < TOTAL; i++){
+    await goToScreen(i);
+    await delay(1800);
+  }
+}
+
+if (window.speechSynthesis) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+}
+
+showScreen(0);
+</script>
+</body>
+</html>
